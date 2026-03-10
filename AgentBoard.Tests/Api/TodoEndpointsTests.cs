@@ -27,14 +27,31 @@ public class TodoEndpointsTests : IClassFixture<AgentBoardWebFactory>
     // -------------------------------------------------------------------------
 
     [Fact]
-    public async Task GetAll_Returns200_WithEmptyArray_OnFreshDb()
+    public async Task GetAll_Returns200_WithJsonArray()
     {
+        // Uses the shared factory DB — may already contain todos created by other tests.
+        // Verifies the endpoint responds 200 and returns a valid JSON array.
         var response = await _client.GetAsync("/api/todos");
 
         Assert.Equal(HttpStatusCode.OK, response.StatusCode);
         var todos = await response.Content.ReadFromJsonAsync<List<TodoDto>>();
         Assert.NotNull(todos);
-        Assert.Empty(todos);
+    }
+
+    [Fact]
+    public async Task GetAll_Returns200_FiltersByTitle_ViaAssignedTo()
+    {
+        // Create a todo assigned to a unique agent to isolate this test from shared DB state.
+        var uniqueAgent = "filter-agent-" + Guid.NewGuid().ToString("N");
+        await CreateTodoAsync("Filterable Todo", assignedTo: uniqueAgent);
+
+        var response = await _client.GetAsync($"/api/todos?assignedTo={uniqueAgent}");
+
+        Assert.Equal(HttpStatusCode.OK, response.StatusCode);
+        var todos = await response.Content.ReadFromJsonAsync<List<TodoDto>>();
+        Assert.NotNull(todos);
+        Assert.Single(todos);
+        Assert.Equal(uniqueAgent, todos[0].AssignedTo);
     }
 
     // -------------------------------------------------------------------------
@@ -242,12 +259,13 @@ public class TodoEndpointsTests : IClassFixture<AgentBoardWebFactory>
     // Private helpers
     // -------------------------------------------------------------------------
 
-    private async Task<TodoDto> CreateTodoAsync(string title, TodoPriority priority = TodoPriority.Medium)
+    private async Task<TodoDto> CreateTodoAsync(string title, TodoPriority priority = TodoPriority.Medium, string? assignedTo = null)
     {
         var response = await _client.PostAsJsonAsync("/api/todos", new CreateTodoRequest
         {
             Title = title,
-            Priority = priority
+            Priority = priority,
+            AssignedTo = assignedTo
         });
         response.EnsureSuccessStatusCode();
         var todo = await response.Content.ReadFromJsonAsync<TodoDto>();
