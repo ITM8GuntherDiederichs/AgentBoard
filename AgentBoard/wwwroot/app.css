@@ -89,7 +89,7 @@ body::before {
         rgba(0,229,255,0.01) 4px
     );
     pointer-events: none;
-    z-index: 9999;
+    z-index: 1;
 }
 
 /* Glow on primary buttons */
