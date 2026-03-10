@@ -47,6 +47,11 @@ app.UseWhen(
     branch => branch.UseStatusCodePagesWithReExecute("/not-found", createScopeForStatusCodePages: true));
 app.UseHttpsRedirection();
 
+// UseStaticFiles serves _content/{LibraryName}/ paths for Razor Class Library packages
+// (e.g. _content/MudBlazor/MudBlazor.min.css). MapStaticAssets() alone does not intercept
+// these paths in development — it only handles fingerprinted app-level assets.
+app.UseStaticFiles();
+
 app.UseAntiforgery();
 
 app.MapTodoEndpoints();

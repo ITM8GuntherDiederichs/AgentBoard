@@ -1,13 +1,13 @@
 ﻿@inherits LayoutComponentBase
 @using AgentBoard.Themes
 
-<MudThemeProvider Theme="@AgentBoardTheme.Theme" IsDarkMode="true" />
+<MudThemeProvider Theme="@AgentBoardTheme.Theme" IsDarkMode="true" DefaultScrollbar="true" />
 <MudPopoverProvider />
 <MudDialogProvider />
 <MudSnackbarProvider />
 
 <MudLayout>
-    <MudAppBar Elevation="0" Style="border-bottom: 1px solid #1E2D45; backdrop-filter: blur(10px);">
+    <MudAppBar Elevation="0" Style="background-color: #0D1220; border-bottom: 1px solid #1E2D45; backdrop-filter: blur(10px);">
         <MudText Typo="Typo.h5" Style="font-family:'Orbitron',sans-serif; color:#00E5FF; letter-spacing:0.1em; text-shadow: 0 0 20px rgba(0,229,255,0.5);">
             ⬡ AGENT<span style="color:#E0E6F0">BOARD</span>
         </MudText>
@@ -16,7 +16,9 @@
             AI Task Coordination
         </MudText>
     </MudAppBar>
-    <MudMainContent Class="pt-16 pa-4" Style="background: #0A0E1A; min-height: 100vh;">
-        @Body
+    <MudMainContent Style="background: #0A0E1A; min-height: 100vh;">
+        <div class="pa-4">
+            @Body
+        </div>
     </MudMainContent>
 </MudLayout>

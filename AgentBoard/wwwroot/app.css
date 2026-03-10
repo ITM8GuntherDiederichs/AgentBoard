@@ -136,7 +136,7 @@ body::before {
 
 /* Card surface for paper elements */
 .mud-paper {
-    border: 1px solid #1E2D45 !important;
+    border: 1px solid #1E2D45;
 }
 
 /* Scrollbar styling */
