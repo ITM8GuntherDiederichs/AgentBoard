@@ -1,7 +1,10 @@
 using AgentBoard.Contracts;
 using AgentBoard.Data.Models;
+using AgentBoard.Hubs;
 using AgentBoard.Services;
 using AgentBoard.Tests.Helpers;
+using Microsoft.AspNetCore.SignalR;
+using NSubstitute;
 
 namespace AgentBoard.Tests.Services;
 
@@ -12,7 +15,8 @@ public class TodoServiceTests
     // -------------------------------------------------------------------------
 
     private static TodoService BuildService(string? dbName = null)
-        => new(TestDbFactory.Create(dbName ?? Guid.NewGuid().ToString()));
+        => new(TestDbFactory.Create(dbName ?? Guid.NewGuid().ToString()),
+               Substitute.For<IHubContext<AgentBoardHub>>());
 
     private static CreateTodoRequest MakeCreateRequest(
         string title = "Test Todo",
