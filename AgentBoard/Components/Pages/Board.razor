@@ -2,17 +2,19 @@
 @using AgentBoard.Contracts
 @using AgentBoard.Data.Models
 @using AgentBoard.Services
+@using Microsoft.AspNetCore.SignalR.Client
 @inject TodoService TodoService
 @inject IDialogService DialogService
 @inject ISnackbar Snackbar
-@implements IDisposable
+@inject NavigationManager Nav
+@implements IAsyncDisposable
 @rendermode InteractiveServer
 
 <PageTitle>AgentBoard</PageTitle>
 
 <MudStack Spacing="3">
     <MudStack Row="true" AlignItems="AlignItems.Center" Justify="Justify.SpaceBetween">
-        <MudText Typo="Typo.h4">📋 Board</MudText>
+        <MudText Typo="Typo.h4" Style="font-family:'Orbitron',sans-serif; color:#00E5FF; letter-spacing:0.05em; text-shadow: 0 0 15px rgba(0,229,255,0.4);">⬡ BOARD</MudText>
         <MudButton Variant="Variant.Filled" Color="Color.Primary" StartIcon="@Icons.Material.Filled.Add"
                    OnClick="OpenCreateDialog">New Todo</MudButton>
     </MudStack>
@@ -41,7 +43,7 @@
     </MudPaper>
 
     @* Todo table *@
-    <MudDataGrid T="Todo" Items="_todos" SortMode="SortMode.Multiple" Hover="true" Dense="true" Style="cursor:pointer">
+    <MudDataGrid T="Todo" Items="_todos" SortMode="SortMode.Multiple" Hover="true" Dense="true" Style="cursor:pointer" RowClassFunc="@GetRowClass">
         <Columns>
             <PropertyColumn Property="t => t.Title" Title="Title" />
             <TemplateColumn Title="Status">
@@ -74,7 +76,7 @@
         </Columns>
     </MudDataGrid>
 
-    <MudText Typo="Typo.caption" Style="opacity:0.5">Auto-refreshes every 5 seconds · @_todos.Count todo(s)</MudText>
+    <MudText Typo="Typo.caption" Style="opacity:0.5">Real-time updates via SignalR · @_todos.Count todo(s)</MudText>
 </MudStack>
 
 @code {
@@ -82,7 +84,7 @@
     private TodoStatus? _filterStatus;
     private TodoPriority? _filterPriority;
     private string? _filterAssignedTo;
-    private Timer? _timer;
+    private HubConnection? _hub;
     private string? _initError;
 
     protected override async Task OnInitializedAsync()
@@ -90,17 +92,25 @@
         try
         {
             await LoadTodos();
-            _timer = new Timer(async _ =>
+            _hub = new HubConnectionBuilder()
+                .WithUrl(Nav.ToAbsoluteUri("/hubs/agentboard"))
+                .WithAutomaticReconnect()
+                .Build();
+            _hub.On("TodoUpdated", async (object _) =>
             {
                 await LoadTodos();
                 await InvokeAsync(StateHasChanged);
-            }, null, TimeSpan.FromSeconds(5), TimeSpan.FromSeconds(5));
+            });
+            await _hub.StartAsync();
         }
         catch (Exception ex)
         {
             _initError = ex.Message;
         }
     }
+
+    private string GetRowClass(Todo todo, int _) =>
+        todo.Status == TodoStatus.InProgress ? "status-inprogress" : "";
 
     private async Task LoadTodos()
         => _todos = await TodoService.GetAllAsync(_filterStatus, _filterPriority, _filterAssignedTo, null);
@@ -147,5 +157,9 @@
         await LoadTodos();
     }
 
-    public void Dispose() => _timer?.Dispose();
+    public async ValueTask DisposeAsync()
+    {
+        if (_hub is not null)
+            await _hub.DisposeAsync();
+    }
 }
