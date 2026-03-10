@@ -98,8 +98,7 @@ public class TodoServiceTests
 
         var result = await svc.GetAllAsync(null, null, null, null);
 
-        Assert.Equal(2, result.TotalCount);
-        Assert.Equal(2, result.Items.Count);
+        Assert.Equal(2, result.Count);
     }
 
     [Fact]
@@ -113,9 +112,8 @@ public class TodoServiceTests
 
         var result = await svc.GetAllAsync(TodoStatus.InProgress, null, null, null);
 
-        Assert.Equal(1, result.TotalCount);
-        Assert.Single(result.Items);
-        Assert.Equal(TodoStatus.InProgress, result.Items[0].Status);
+        Assert.Single(result);
+        Assert.Equal(TodoStatus.InProgress, result[0].Status);
     }
 
     [Fact]
@@ -127,9 +125,8 @@ public class TodoServiceTests
 
         var result = await svc.GetAllAsync(null, TodoPriority.High, null, null);
 
-        Assert.Equal(1, result.TotalCount);
-        Assert.Single(result.Items);
-        Assert.Equal(TodoPriority.High, result.Items[0].Priority);
+        Assert.Single(result);
+        Assert.Equal(TodoPriority.High, result[0].Priority);
     }
 
     [Fact]
@@ -141,9 +138,8 @@ public class TodoServiceTests
 
         var result = await svc.GetAllAsync(null, null, "alice", null);
 
-        Assert.Equal(1, result.TotalCount);
-        Assert.Single(result.Items);
-        Assert.Equal("alice", result.Items[0].AssignedTo);
+        Assert.Single(result);
+        Assert.Equal("alice", result[0].AssignedTo);
     }
 
     [Fact]
@@ -156,38 +152,8 @@ public class TodoServiceTests
 
         var result = await svc.GetAllAsync(null, null, null, "agent-x");
 
-        Assert.Equal(1, result.TotalCount);
-        Assert.Single(result.Items);
-        Assert.Equal("agent-x", result.Items[0].ClaimedBy);
-    }
-
-    [Fact]
-    public async Task GetAllAsync_Pagination_ReturnsCorrectPage()
-    {
-        var svc = BuildService();
-        for (var i = 1; i <= 5; i++)
-            await svc.CreateAsync(MakeCreateRequest($"Task {i}"));
-
-        var page1 = await svc.GetAllAsync(null, null, null, null, page: 1, pageSize: 2);
-        var page2 = await svc.GetAllAsync(null, null, null, null, page: 2, pageSize: 2);
-        var page3 = await svc.GetAllAsync(null, null, null, null, page: 3, pageSize: 2);
-
-        Assert.Equal(5, page1.TotalCount);
-        Assert.Equal(3, page1.TotalPages);
-        Assert.Equal(2, page1.Items.Count);
-        Assert.Equal(2, page2.Items.Count);
-        Assert.Single(page3.Items);
-    }
-
-    [Fact]
-    public async Task GetAllAsync_ClampsPageSizeTo100()
-    {
-        var svc = BuildService();
-        await svc.CreateAsync(MakeCreateRequest("A"));
-
-        var result = await svc.GetAllAsync(null, null, null, null, pageSize: 9999);
-
-        Assert.Equal(100, result.PageSize);
+        Assert.Single(result);
+        Assert.Equal("agent-x", result[0].ClaimedBy);
     }
 
     // -------------------------------------------------------------------------
@@ -394,122 +360,5 @@ public class TodoServiceTests
         var svc = BuildService();
         var result = await svc.ReleaseClaimAsync(Guid.NewGuid());
         Assert.Null(result);
-    }
-
-    // -------------------------------------------------------------------------
-    // Audit log — LogEventAsync / GetEventsAsync
-    // -------------------------------------------------------------------------
-
-    [Fact]
-    public async Task CreateAsync_RecordsCreatedEvent()
-    {
-        var svc = BuildService();
-        var created = await svc.CreateAsync(MakeCreateRequest("Audit Create"));
-
-        var events = await svc.GetEventsAsync(created.Id);
-
-        Assert.Single(events, e => e.EventType == "Created");
-        Assert.Equal(created.Id, events[0].TodoId);
-        Assert.Equal("Audit Create", events[0].TodoTitle);
-    }
-
-    [Fact]
-    public async Task UpdateAsync_RecordsUpdatedEvent()
-    {
-        var svc = BuildService();
-        var created = await svc.CreateAsync(MakeCreateRequest("Before"));
-        await svc.UpdateAsync(created.Id, new UpdateTodoRequest { Title = "After", Status = TodoStatus.InProgress, Priority = TodoPriority.High });
-
-        var events = await svc.GetEventsAsync(created.Id);
-
-        Assert.Contains(events, e => e.EventType == "Updated");
-    }
-
-    [Fact]
-    public async Task PatchAsync_RecordsUpdatedEvent()
-    {
-        var svc = BuildService();
-        var created = await svc.CreateAsync(MakeCreateRequest("Patch Me"));
-        await svc.PatchAsync(created.Id, new PatchTodoRequest { Status = TodoStatus.Done });
-
-        var events = await svc.GetEventsAsync(created.Id);
-
-        Assert.Contains(events, e => e.EventType == "Updated");
-    }
-
-    [Fact]
-    public async Task DeleteAsync_RecordsDeletedEvent()
-    {
-        var svc = BuildService();
-        var created = await svc.CreateAsync(MakeCreateRequest("Delete Audit"));
-        var todoId = created.Id;
-
-        await svc.DeleteAsync(todoId);
-
-        var events = await svc.GetEventsAsync(todoId);
-        Assert.Contains(events, e => e.EventType == "Deleted");
-        // Title snapshot is preserved even though the Todo is gone
-        Assert.All(events.Where(e => e.EventType == "Deleted"),
-            e => Assert.Equal("Delete Audit", e.TodoTitle));
-    }
-
-    [Fact]
-    public async Task ClaimAsync_RecordsClaimedEvent_WithActorAndDetails()
-    {
-        var svc = BuildService();
-        var created = await svc.CreateAsync(MakeCreateRequest());
-
-        await svc.ClaimAsync(created.Id, "claim-agent", ttlMinutes: 15);
-
-        var events = await svc.GetEventsAsync(created.Id);
-        var claimedEvent = Assert.Single(events, e => e.EventType == "Claimed");
-        Assert.Equal("claim-agent", claimedEvent.Actor);
-        Assert.Contains("15", claimedEvent.Details ?? "");
-    }
-
-    [Fact]
-    public async Task ReleaseClaimAsync_RecordsReleasedEvent()
-    {
-        var svc = BuildService();
-        var created = await svc.CreateAsync(MakeCreateRequest());
-        await svc.ClaimAsync(created.Id, "holder-agent");
-
-        await svc.ReleaseClaimAsync(created.Id);
-
-        var events = await svc.GetEventsAsync(created.Id);
-        Assert.Contains(events, e => e.EventType == "Released");
-    }
-
-    [Fact]
-    public async Task GetEventsAsync_ReturnsEventsOrderedByOccurredAtDescending()
-    {
-        var svc = BuildService();
-        var created = await svc.CreateAsync(MakeCreateRequest("Order Test"));
-        await svc.UpdateAsync(created.Id, new UpdateTodoRequest { Title = "Updated", Priority = TodoPriority.High, Status = TodoStatus.InProgress });
-
-        var events = await svc.GetEventsAsync(created.Id);
-
-        Assert.True(events.Count >= 2);
-        for (var i = 0; i < events.Count - 1; i++)
-            Assert.True(events[i].OccurredAt >= events[i + 1].OccurredAt);
-    }
-
-    [Fact]
-    public async Task GetEventsAsync_RespectsMaxResults()
-    {
-        var svc = BuildService();
-        var created = await svc.CreateAsync(MakeCreateRequest());
-        // Log extra events manually
-        for (var i = 0; i < 5; i++)
-            await svc.LogEventAsync(new AgentBoard.Data.Models.TodoEvent
-            {
-                TodoId = created.Id,
-                TodoTitle = created.Title,
-                EventType = "Updated"
-            });
-
-        var events = await svc.GetEventsAsync(created.Id, maxResults: 3);
-
-        Assert.Equal(3, events.Count);
     }
 }
