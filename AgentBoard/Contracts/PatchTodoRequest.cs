@@ -6,4 +6,5 @@ public class PatchTodoRequest
 {
     public TodoStatus? Status { get; set; }
     public TodoPriority? Priority { get; set; }
+    public DateTime? DueAt { get; set; }
 }

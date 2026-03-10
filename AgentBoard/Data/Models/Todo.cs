@@ -22,6 +22,8 @@ public class Todo
     public string? ClaimedBy { get; set; }
 
     public DateTime? ClaimedAt { get; set; }
+    public DateTime? ClaimExpiresAt { get; set; }
+    public DateTime? DueAt { get; set; }
     public DateTime CreatedAt { get; set; } = DateTime.UtcNow;
     public DateTime UpdatedAt { get; set; } = DateTime.UtcNow;
 

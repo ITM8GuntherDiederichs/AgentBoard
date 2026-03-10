@@ -1,6 +1,7 @@
 using AgentBoard.Api;
 using AgentBoard.Components;
 using AgentBoard.Data;
+using AgentBoard.Hubs;
 using AgentBoard.Services;
 using Microsoft.EntityFrameworkCore;
 using MudBlazor.Services;
@@ -11,10 +12,13 @@ var builder = WebApplication.CreateBuilder(args);
 builder.Services.AddRazorComponents()
     .AddInteractiveServerComponents();
 
+builder.Services.AddSignalR();
+
 builder.Services.AddDbContextFactory<ApplicationDbContext>(options =>
     options.UseSqlServer(builder.Configuration.GetConnectionString("DefaultConnection")));
 
 builder.Services.AddScoped<TodoService>();
+builder.Services.AddHostedService<ClaimExpiryService>();
 
 builder.Services.AddMudServices();
 
@@ -46,6 +50,8 @@ app.UseHttpsRedirection();
 app.UseAntiforgery();
 
 app.MapTodoEndpoints();
+
+app.MapHub<AgentBoardHub>("/hubs/agentboard");
 
 app.MapStaticAssets();
 app.MapRazorComponents<App>()
