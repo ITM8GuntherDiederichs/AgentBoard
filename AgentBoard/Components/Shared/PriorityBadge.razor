@@ -1,6 +1,6 @@
 @using AgentBoard.Data.Models
 
-<MudChip T="string" Color="@GetColor()" Size="Size.Small" Label="true">@Priority.ToString()</MudChip>
+<MudChip T="string" Color="@GetColor()" Size="Size.Small" Label="true" Class="@GetClass()">@Priority.ToString()</MudChip>
 
 @code {
     [Parameter, EditorRequired] public TodoPriority Priority { get; set; }
@@ -13,4 +13,6 @@
         TodoPriority.Critical => Color.Error,
         _ => Color.Default
     };
+
+    private string GetClass() => Priority == TodoPriority.Critical ? "status-chip-critical" : "";
 }

@@ -1,17 +1,22 @@
 ﻿@inherits LayoutComponentBase
+@using AgentBoard.Themes
 
-<MudThemeProvider />
+<MudThemeProvider Theme="@AgentBoardTheme.Theme" IsDarkMode="true" />
 <MudPopoverProvider />
 <MudDialogProvider />
 <MudSnackbarProvider />
 
 <MudLayout>
-    <MudAppBar Elevation="1">
-        <MudText Typo="Typo.h5" Class="ml-3">🤖 AgentBoard</MudText>
+    <MudAppBar Elevation="0" Style="border-bottom: 1px solid #1E2D45; backdrop-filter: blur(10px);">
+        <MudText Typo="Typo.h5" Style="font-family:'Orbitron',sans-serif; color:#00E5FF; letter-spacing:0.1em; text-shadow: 0 0 20px rgba(0,229,255,0.5);">
+            ⬡ AGENT<span style="color:#E0E6F0">BOARD</span>
+        </MudText>
         <MudSpacer />
-        <MudText Typo="Typo.body2" Class="mr-3" Style="opacity:0.7">AI Task Coordination Board</MudText>
+        <MudText Typo="Typo.caption" Style="color:#7B8EA8; letter-spacing:0.15em; text-transform:uppercase;">
+            AI Task Coordination
+        </MudText>
     </MudAppBar>
-    <MudMainContent Class="pt-16 pa-4">
+    <MudMainContent Class="pt-16 pa-4" Style="background: #0A0E1A; min-height: 100vh;">
         @Body
     </MudMainContent>
 </MudLayout>

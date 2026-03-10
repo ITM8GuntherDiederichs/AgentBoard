@@ -1,6 +1,6 @@
 @using AgentBoard.Data.Models
 
-<MudChip T="string" Color="@GetColor()" Size="Size.Small" Label="true">@Status.ToString()</MudChip>
+<MudChip T="string" Color="@GetColor()" Size="Size.Small" Label="true" Class="@GetClass()">@Status.ToString()</MudChip>
 
 @code {
     [Parameter, EditorRequired] public TodoStatus Status { get; set; }
@@ -12,5 +12,13 @@
         TodoStatus.Blocked => Color.Warning,
         TodoStatus.Done => Color.Success,
         _ => Color.Default
+    };
+
+    private string GetClass() => Status switch
+    {
+        TodoStatus.Done => "status-chip-done",
+        TodoStatus.InProgress => "status-chip-inprogress",
+        TodoStatus.Blocked => "status-chip-blocked",
+        _ => ""
     };
 }

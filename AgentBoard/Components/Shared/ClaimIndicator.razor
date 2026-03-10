@@ -4,7 +4,7 @@
 {
     <MudStack Row="true" AlignItems="AlignItems.Center" Spacing="1">
         <MudIcon Icon="@Icons.Material.Filled.Lock" Size="Size.Small" Color="Color.Warning" />
-        <MudText Typo="Typo.caption">@Todo.ClaimedBy</MudText>
+        <MudText Typo="Typo.caption" Class="agent-id">@Todo.ClaimedBy</MudText>
         @if (ShowRelease)
         {
             <MudIconButton Icon="@Icons.Material.Filled.LockOpen" Size="Size.Small" Color="Color.Default"

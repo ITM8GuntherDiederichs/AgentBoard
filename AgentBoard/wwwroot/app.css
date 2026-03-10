@@ -1,5 +1,6 @@
 html, body {
-    font-family: 'Helvetica Neue', Helvetica, Arial, sans-serif;
+    font-family: 'Inter', 'Helvetica Neue', Helvetica, Arial, sans-serif;
+    background: #0A0E1A;
 }
 
 a, .btn-link {
@@ -58,3 +59,88 @@ h1:focus {
 .form-floating > .form-control-plaintext:focus::placeholder, .form-floating > .form-control:focus::placeholder {
     text-align: start;
 }
+/* ================================================================
+   Futuristic AgentBoard theme — cyberpunk/sci-fi dark UI
+   ================================================================ */
+
+:root {
+    --neon-cyan: #00E5FF;
+    --neon-green: #00E676;
+    --neon-amber: #FFD600;
+    --neon-red: #FF1744;
+    --bg-dark: #0A0E1A;
+    --surface: #111827;
+}
+
+body {
+    background: var(--bg-dark);
+}
+
+/* Scanline texture overlay */
+body::before {
+    content: '';
+    position: fixed;
+    top: 0; left: 0; right: 0; bottom: 0;
+    background: repeating-linear-gradient(
+        0deg,
+        transparent,
+        transparent 2px,
+        rgba(0,229,255,0.01) 2px,
+        rgba(0,229,255,0.01) 4px
+    );
+    pointer-events: none;
+    z-index: 9999;
+}
+
+/* Glow on primary buttons */
+.mud-button-filled-primary {
+    box-shadow: 0 0 15px rgba(0,229,255,0.4) !important;
+    transition: box-shadow 0.2s ease !important;
+}
+.mud-button-filled-primary:hover {
+    box-shadow: 0 0 25px rgba(0,229,255,0.7) !important;
+}
+
+/* Agent ID monospace styling */
+.agent-id {
+    font-family: 'JetBrains Mono', monospace;
+    font-size: 0.75rem;
+    color: var(--neon-cyan);
+    letter-spacing: 0.05em;
+}
+
+/* Pulsing animation for InProgress todos */
+@keyframes neon-pulse {
+    0%, 100% { box-shadow: 0 0 5px rgba(64,196,255,0.3); }
+    50% { box-shadow: 0 0 15px rgba(64,196,255,0.7), 0 0 30px rgba(64,196,255,0.3); }
+}
+.status-inprogress {
+    animation: neon-pulse 2s ease-in-out infinite;
+}
+
+/* Table rows hover glow */
+.mud-table-row:hover td {
+    background: rgba(0,229,255,0.04) !important;
+}
+
+/* Neon dividers */
+.mud-divider {
+    border-color: #1E2D45 !important;
+}
+
+/* Glowing chip for status/priority */
+.status-chip-done { box-shadow: 0 0 8px rgba(0,230,118,0.5); }
+.status-chip-inprogress { box-shadow: 0 0 8px rgba(64,196,255,0.5); }
+.status-chip-blocked { box-shadow: 0 0 8px rgba(255,214,0,0.5); }
+.status-chip-critical { box-shadow: 0 0 8px rgba(255,23,68,0.5); }
+
+/* Card surface for paper elements */
+.mud-paper {
+    border: 1px solid #1E2D45 !important;
+}
+
+/* Scrollbar styling */
+::-webkit-scrollbar { width: 6px; }
+::-webkit-scrollbar-track { background: #0A0E1A; }
+::-webkit-scrollbar-thumb { background: #1E2D45; border-radius: 3px; }
+::-webkit-scrollbar-thumb:hover { background: #00E5FF; }
