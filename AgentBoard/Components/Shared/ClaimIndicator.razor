@@ -1,0 +1,24 @@
+@using AgentBoard.Data.Models
+
+@if (!string.IsNullOrEmpty(Todo.ClaimedBy))
+{
+    <MudStack Row="true" AlignItems="AlignItems.Center" Spacing="1">
+        <MudIcon Icon="@Icons.Material.Filled.Lock" Size="Size.Small" Color="Color.Warning" />
+        <MudText Typo="Typo.caption">@Todo.ClaimedBy</MudText>
+        @if (ShowRelease)
+        {
+            <MudIconButton Icon="@Icons.Material.Filled.LockOpen" Size="Size.Small" Color="Color.Default"
+                           aria-label="Release claim" OnClick="OnRelease" />
+        }
+    </MudStack>
+}
+else
+{
+    <MudText Typo="Typo.caption" Style="opacity:0.4">—</MudText>
+}
+
+@code {
+    [Parameter, EditorRequired] public Todo Todo { get; set; } = default!;
+    [Parameter] public bool ShowRelease { get; set; } = true;
+    [Parameter] public EventCallback OnRelease { get; set; }
+}

@@ -1,0 +1,16 @@
+@using AgentBoard.Data.Models
+
+<MudChip T="string" Color="@GetColor()" Size="Size.Small" Label="true">@Priority.ToString()</MudChip>
+
+@code {
+    [Parameter, EditorRequired] public TodoPriority Priority { get; set; }
+
+    private Color GetColor() => Priority switch
+    {
+        TodoPriority.Low => Color.Default,
+        TodoPriority.Medium => Color.Info,
+        TodoPriority.High => Color.Warning,
+        TodoPriority.Critical => Color.Error,
+        _ => Color.Default
+    };
+}

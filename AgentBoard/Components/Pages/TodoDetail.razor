@@ -1,0 +1,122 @@
+@page "/todo/{Id:guid}"
+@using AgentBoard.Contracts
+@using AgentBoard.Data.Models
+@using AgentBoard.Services
+@inject TodoService TodoService
+@inject NavigationManager Nav
+@inject ISnackbar Snackbar
+@rendermode InteractiveServer
+
+<PageTitle>Todo Detail — AgentBoard</PageTitle>
+
+@* Spinner shown while loading *@
+<div style="@(_loaded ? "display:none" : "")">
+    <MudProgressCircular Indeterminate="true" />
+</div>
+
+@* Not found *@
+@if (_loaded && _notFound)
+{
+    <MudAlert Severity="Severity.Warning">Todo not found.</MudAlert>
+    <MudButton Class="mt-2" OnClick='() => Nav.NavigateTo("/")'>Back to Board</MudButton>
+}
+
+@* Detail form — always in DOM so MudSelect is never dynamically inserted *@
+<div style="@(!_loaded || _notFound ? "display:none" : "")">
+    <MudStack Spacing="3" Style="max-width:700px">
+        <MudStack Row="true" AlignItems="AlignItems.Center" Spacing="2">
+            <MudIconButton Icon="@Icons.Material.Filled.ArrowBack" OnClick='() => Nav.NavigateTo("/")' />
+            <MudText Typo="Typo.h5">Edit Todo</MudText>
+            <MudSpacer />
+            <StatusBadge Status="_todo.Status" />
+        </MudStack>
+
+        <MudPaper Class="pa-4" Elevation="1">
+            <MudStack Spacing="3">
+                <MudTextField @bind-Value="_todo.Title" Label="Title" Required="true" MaxLength="200" />
+                <MudTextField @bind-Value="_todo.Description" Label="Description" Lines="4" MaxLength="2000" />
+                <MudSelect @bind-Value="_todo.Status" Label="Status" T="TodoStatus">
+                    @foreach (var s in Enum.GetValues<TodoStatus>())
+                    {
+                        <MudSelectItem T="TodoStatus" Value="@s">@s.ToString()</MudSelectItem>
+                    }
+                </MudSelect>
+                <MudSelect @bind-Value="_todo.Priority" Label="Priority" T="TodoPriority">
+                    @foreach (var p in Enum.GetValues<TodoPriority>())
+                    {
+                        <MudSelectItem T="TodoPriority" Value="@p">@p.ToString()</MudSelectItem>
+                    }
+                </MudSelect>
+                <MudTextField @bind-Value="_todo.AssignedTo" Label="Assigned To" MaxLength="100" />
+
+                <MudDivider />
+                <MudText Typo="Typo.subtitle2">Claim Status</MudText>
+                <ClaimIndicator Todo="_todo" OnRelease="ReleaseClaim" />
+
+                <MudDivider />
+                <MudStack Row="true" Justify="Justify.FlexEnd" Spacing="2">
+                    <MudButton Variant="Variant.Outlined" OnClick='() => Nav.NavigateTo("/")'>Cancel</MudButton>
+                    <MudButton Variant="Variant.Filled" Color="Color.Primary" OnClick="Save">Save</MudButton>
+                </MudStack>
+            </MudStack>
+        </MudPaper>
+
+        <MudPaper Class="pa-3" Elevation="0">
+            <MudText Typo="Typo.caption">
+                Created: @_todo.CreatedAt.ToString("yyyy-MM-dd HH:mm") UTC &middot;
+                Updated: @_todo.UpdatedAt.ToString("yyyy-MM-dd HH:mm") UTC
+            </MudText>
+        </MudPaper>
+    </MudStack>
+</div>
+
+@code {
+    [Parameter] public Guid Id { get; set; }
+
+    // Non-nullable sentinel — MudSelect always has a valid binding target (never null).
+    private Todo _todo = new();
+    private bool _loaded;
+    private bool _notFound;
+
+    protected override async Task OnInitializedAsync()
+    {
+        try
+        {
+            var result = await TodoService.GetByIdAsync(Id);
+            if (result is not null)
+                _todo = result;
+            else
+                _notFound = true;
+            _loaded = true;
+        }
+        catch (Exception ex)
+        {
+            _notFound = true;
+            _loaded = true;
+            Snackbar.Add($"Error loading todo: {ex.Message}", Severity.Error);
+        }
+    }
+
+    private async Task Save()
+    {
+        var request = new UpdateTodoRequest
+        {
+            Title = _todo.Title,
+            Description = _todo.Description,
+            Status = _todo.Status,
+            Priority = _todo.Priority,
+            AssignedTo = _todo.AssignedTo
+        };
+        await TodoService.UpdateAsync(_todo.Id, request);
+        Snackbar.Add("Todo saved", Severity.Success);
+        Nav.NavigateTo("/");
+    }
+
+    private async Task ReleaseClaim()
+    {
+        await TodoService.ReleaseClaimAsync(_todo.Id);
+        var updated = await TodoService.GetByIdAsync(_todo.Id);
+        if (updated is not null) _todo = updated;
+        Snackbar.Add("Claim released", Severity.Info);
+    }
+}
