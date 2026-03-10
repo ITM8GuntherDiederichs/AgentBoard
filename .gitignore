@@ -128,6 +128,9 @@ ipch/
 
 # Visual Studio Trace Files
 *.e2e
+# Allow our E2E test project
+!AgentBoard.E2E/
+!AgentBoard.E2E/**
 
 # TFS 2012 Local Workspace
 $tf/
@@ -480,3 +483,4 @@ $RECYCLE.BIN/
 
 # Vim temporary swap files
 *.swp
+
