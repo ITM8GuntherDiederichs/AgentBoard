@@ -7,6 +7,7 @@
 @inject IDialogService DialogService
 @inject ISnackbar Snackbar
 @inject NavigationManager Nav
+@inject IJSRuntime JS
 @implements IAsyncDisposable
 @rendermode InteractiveServer
 
@@ -15,112 +16,278 @@
 <MudStack Spacing="3">
     <MudStack Row="true" AlignItems="AlignItems.Center" Justify="Justify.SpaceBetween">
         <MudText Typo="Typo.h4" Style="font-family:'Orbitron',sans-serif; color:#00E5FF; letter-spacing:0.05em; text-shadow: 0 0 15px rgba(0,229,255,0.4);">⬡ BOARD</MudText>
-        <MudButton Variant="Variant.Filled" Color="Color.Primary" StartIcon="@Icons.Material.Filled.Add"
-                   OnClick="OpenCreateDialog">New Todo</MudButton>
+        <MudStack Row="true" Spacing="1" AlignItems="AlignItems.Center">
+            <MudTooltip Text="Table view">
+                <MudIconButton Icon="@Icons.Material.Filled.TableRows"
+                               Color="@(_isKanban ? Color.Default : Color.Primary)"
+                               Size="Size.Medium"
+                               aria-label="Switch to table view"
+                               OnClick="@(() => SetView(false))" />
+            </MudTooltip>
+            <MudTooltip Text="Kanban view">
+                <MudIconButton Icon="@Icons.Material.Filled.ViewColumn"
+                               Color="@(_isKanban ? Color.Primary : Color.Default)"
+                               Size="Size.Medium"
+                               aria-label="Switch to kanban view"
+                               OnClick="@(() => SetView(true))" />
+            </MudTooltip>
+            <MudDivider Vertical="true" FlexItem="true" Style="height:32px; margin: 0 4px;" />
+            <MudButton Variant="Variant.Filled" Color="Color.Primary" StartIcon="@Icons.Material.Filled.Add"
+                       OnClick="OpenCreateDialog">New Todo</MudButton>
+        </MudStack>
     </MudStack>
 
     @* Filter bar *@
     <MudPaper Class="pa-3" Elevation="1">
         <MudStack Row="true" Spacing="2" Wrap="Wrap.Wrap">
-            <MudSelect T="TodoStatus?" @bind-Value="_filterStatus" @bind-Value:after="LoadTodos"
-                       Label="Status" Clearable="true" Style="min-width:140px">
-                @foreach (var s in Enum.GetValues<TodoStatus>())
-                {
-                    <MudSelectItem T="TodoStatus?" Value="@((TodoStatus?)s)">@s.ToString()</MudSelectItem>
-                }
-            </MudSelect>
-            <MudSelect T="TodoPriority?" @bind-Value="_filterPriority" @bind-Value:after="LoadTodos"
+            @* Status filter hidden in Kanban mode (columns already show by status) — CSS only, no @if *@
+            <div style="@(_isKanban ? "display:none" : "")">
+                <MudSelect T="TodoStatus?" @bind-Value="_filterStatus" @bind-Value:after="OnFilterChanged"
+                           Label="Status" Clearable="true" Style="min-width:140px">
+                    @foreach (var s in Enum.GetValues<TodoStatus>())
+                    {
+                        <MudSelectItem T="TodoStatus?" Value="@((TodoStatus?)s)">@s.ToString()</MudSelectItem>
+                    }
+                </MudSelect>
+            </div>
+            <MudSelect T="TodoPriority?" @bind-Value="_filterPriority" @bind-Value:after="OnFilterChanged"
                        Label="Priority" Clearable="true" Style="min-width:140px">
                 @foreach (var p in Enum.GetValues<TodoPriority>())
                 {
                     <MudSelectItem T="TodoPriority?" Value="@((TodoPriority?)p)">@p.ToString()</MudSelectItem>
                 }
             </MudSelect>
-            <MudTextField @bind-Value="_filterAssignedTo" @bind-Value:after="LoadTodos"
+            <MudTextField @bind-Value="_filterAssignedTo" @bind-Value:after="OnFilterChanged"
                           Label="Assigned To" Style="min-width:160px" />
             <MudButton Variant="Variant.Outlined" OnClick="ClearFilters">Clear</MudButton>
         </MudStack>
     </MudPaper>
 
-    @* Todo table *@
-    <MudDataGrid T="Todo" Items="_todos" SortMode="SortMode.Multiple" Hover="true" Dense="true" Style="cursor:pointer" RowClassFunc="@GetRowClass">
-        <Columns>
-            <PropertyColumn Property="t => t.Title" Title="Title" />
-            <TemplateColumn Title="Status">
-                <CellTemplate>
-                    <StatusBadge Status="@context.Item.Status" />
-                </CellTemplate>
-            </TemplateColumn>
-            <TemplateColumn Title="Priority">
-                <CellTemplate>
-                    <PriorityBadge Priority="@context.Item.Priority" />
-                </CellTemplate>
-            </TemplateColumn>
-            <PropertyColumn Property="t => t.AssignedTo" Title="Assigned To" />
-            <TemplateColumn Title="Claimed By">
-                <CellTemplate>
-                    <ClaimIndicator Todo="@context.Item" OnRelease="@(() => ReleaseClaim(context.Item))" />
-                </CellTemplate>
-            </TemplateColumn>
-            <PropertyColumn Property="t => t.UpdatedAt" Title="Updated" Format="yyyy-MM-dd HH:mm" />
-            <TemplateColumn Title="Actions" CellClass="d-flex justify-end">
-                <CellTemplate>
-                    <MudStack Row="true" Spacing="0">
-                        <MudIconButton Icon="@Icons.Material.Filled.Edit" Size="Size.Small"
-                                       Href="@($"/todo/{context.Item.Id}")" />
-                        <MudIconButton Icon="@Icons.Material.Filled.Delete" Size="Size.Small" Color="Color.Error"
-                                       OnClick="@(() => DeleteTodo(context.Item))" />
-                    </MudStack>
-                </CellTemplate>
-            </TemplateColumn>
-        </Columns>
-    </MudDataGrid>
+    @* Kanban view *@
+    @if (_isKanban)
+    {
+        <KanbanBoard Todos="_kanbanTodos" />
+        <MudText Typo="Typo.caption" Style="opacity:0.5">
+            Real-time updates via SignalR · @_kanbanTodos.Count todo(s)
+        </MudText>
+    }
+    else
+    {
+        @* Todo table — server-side paging *@
+        <MudDataGrid @ref="_grid"
+                     T="Todo"
+                     ServerData="LoadServerData"
+                     SortMode="SortMode.Multiple"
+                     Hover="true"
+                     Dense="true"
+                     Style="cursor:pointer"
+                     RowClassFunc="@GetRowClass">
+            <Columns>
+                <PropertyColumn Property="t => t.Title" Title="Title" />
+                <TemplateColumn Title="Status">
+                    <CellTemplate>
+                        <StatusBadge Status="@context.Item.Status" />
+                    </CellTemplate>
+                </TemplateColumn>
+                <TemplateColumn Title="Priority">
+                    <CellTemplate>
+                        <PriorityBadge Priority="@context.Item.Priority" />
+                    </CellTemplate>
+                </TemplateColumn>
+                <PropertyColumn Property="t => t.AssignedTo" Title="Assigned To" />
+                <TemplateColumn Title="Claimed By">
+                    <CellTemplate>
+                        <ClaimIndicator Todo="@context.Item" OnRelease="@(() => ReleaseClaim(context.Item))" />
+                    </CellTemplate>
+                </TemplateColumn>
+                <PropertyColumn Property="t => t.UpdatedAt" Title="Updated" Format="yyyy-MM-dd HH:mm" />
+                <TemplateColumn Title="Actions" CellClass="d-flex justify-end">
+                    <CellTemplate>
+                        <MudStack Row="true" Spacing="0">
+                            <MudIconButton Icon="@Icons.Material.Filled.Edit" Size="Size.Small"
+                                           Href="@($"/todo/{context.Item.Id}")" />
+                            <MudIconButton Icon="@Icons.Material.Filled.Delete" Size="Size.Small" Color="Color.Error"
+                                           OnClick="@(() => DeleteTodo(context.Item))" />
+                        </MudStack>
+                    </CellTemplate>
+                </TemplateColumn>
+            </Columns>
+            <PagerContent>
+                <MudDataGridPager T="Todo" PageSizeOptions="@(new[] { 10, 25, 50, 100 })" />
+            </PagerContent>
+        </MudDataGrid>
 
-    <MudText Typo="Typo.caption" Style="opacity:0.5">Real-time updates via SignalR · @_todos.Count todo(s)</MudText>
+        @* Footer: range + total *@
+        <MudStack Row="true" AlignItems="AlignItems.Center" Justify="Justify.SpaceBetween">
+            <MudText Typo="Typo.caption" Style="opacity:0.5">Real-time updates via SignalR</MudText>
+            @if (_lastResult is not null)
+            {
+                var page    = _lastResult.Page;
+                var pgSize  = _lastResult.PageSize;
+                var total   = _lastResult.TotalCount;
+                var first   = total == 0 ? 0 : (page - 1) * pgSize + 1;
+                var last    = Math.Min(page * pgSize, total);
+                <MudText Typo="Typo.caption" Style="opacity:0.7">
+                    Showing @first–@last of @total todo(s)
+                </MudText>
+            }
+        </MudStack>
+    }
 </MudStack>
 
 @code {
-    private List<Todo> _todos = [];
-    private TodoStatus? _filterStatus;
+    private MudDataGrid<Todo>? _grid;
+    private PagedResult<Todo>? _lastResult;
+
+    // View state
+    private bool _isKanban;
+    private List<Todo> _kanbanTodos = [];
+
+    private TodoStatus?  _filterStatus;
     private TodoPriority? _filterPriority;
     private string? _filterAssignedTo;
+
     private HubConnection? _hub;
-    private string? _initError;
 
     protected override async Task OnInitializedAsync()
     {
         try
         {
-            await LoadTodos();
             _hub = new HubConnectionBuilder()
                 .WithUrl(Nav.ToAbsoluteUri("/hubs/agentboard"))
                 .WithAutomaticReconnect()
                 .Build();
+
+            // SignalR: reload the CURRENT page (do not reset to page 1).
             _hub.On("TodoUpdated", async (object _) =>
             {
-                await LoadTodos();
-                await InvokeAsync(StateHasChanged);
+                await InvokeAsync(async () =>
+                {
+                    if (_isKanban)
+                    {
+                        await LoadKanbanData();
+                    }
+                    else if (_grid is not null)
+                    {
+                        await _grid.ReloadServerData();
+                    }
+                    StateHasChanged();
+                });
             });
+
             await _hub.StartAsync();
         }
         catch (Exception ex)
         {
-            _initError = ex.Message;
+            Snackbar.Add($"SignalR error: {ex.Message}", Severity.Warning);
+        }
+    }
+
+    /// <summary>
+    /// Restore the saved view preference from localStorage after first render.
+    /// JS interop is only available after first render.
+    /// </summary>
+    protected override async Task OnAfterRenderAsync(bool firstRender)
+    {
+        if (!firstRender) return;
+        try
+        {
+            var saved = await JS.InvokeAsync<string?>("boardPrefs.getView");
+            if (saved == "kanban")
+            {
+                _isKanban = true;
+                await LoadKanbanData();
+                StateHasChanged();
+            }
+        }
+        catch
+        {
+            // localStorage unavailable — keep default table view
         }
     }
 
     private string GetRowClass(Todo todo, int _) =>
         todo.Status == TodoStatus.InProgress ? "status-inprogress" : "";
 
-    private async Task LoadTodos()
-        => _todos = await TodoService.GetAllAsync(_filterStatus, _filterPriority, _filterAssignedTo, null);
+    /// <summary>
+    /// Switch between table and kanban view and persist the choice.
+    /// </summary>
+    private async Task SetView(bool kanban)
+    {
+        _isKanban = kanban;
+        try
+        {
+            await JS.InvokeVoidAsync("boardPrefs.setView", kanban ? "kanban" : "table");
+        }
+        catch { /* ignore */ }
+
+        if (kanban)
+        {
+            await LoadKanbanData();
+        }
+        else if (_grid is not null)
+        {
+            await _grid.ReloadServerData();
+        }
+    }
+
+    /// <summary>
+    /// Loads all todos (no status filter) for the Kanban view.
+    /// Priority and AssignedTo filters still apply.
+    /// </summary>
+    private async Task LoadKanbanData()
+    {
+        var result = await TodoService.GetAllAsync(
+            status: null,               // all statuses — columns show by status
+            priority: _filterPriority,
+            assignedTo: _filterAssignedTo,
+            claimedBy: null,
+            page: 1,
+            pageSize: 100);             // fetch up to 100 items for the kanban
+        _kanbanTodos = result.Items;
+    }
+
+    /// <summary>
+    /// Called by MudDataGrid whenever the page, page-size, or sort changes.
+    /// </summary>
+    private async Task<GridData<Todo>> LoadServerData(GridState<Todo> state, CancellationToken _ct)
+    {
+        var page     = state.Page + 1;       // MudDataGrid uses 0-based page index
+        var pageSize = state.PageSize;
+
+        _lastResult = await TodoService.GetAllAsync(
+            _filterStatus, _filterPriority, _filterAssignedTo, null,
+            page: page, pageSize: pageSize);
+
+        return new GridData<Todo>
+        {
+            Items      = _lastResult.Items,
+            TotalItems = _lastResult.TotalCount
+        };
+    }
+
+    /// <summary>
+    /// Filter changed: reset to page 1 then reload (table) or reload kanban data.
+    /// </summary>
+    private async Task OnFilterChanged()
+    {
+        if (_isKanban)
+        {
+            await LoadKanbanData();
+        }
+        else if (_grid is not null)
+        {
+            _grid.NavigateTo(Page.First);
+            await _grid.ReloadServerData();
+        }
+    }
 
     private async Task ClearFilters()
     {
-        _filterStatus = null;
-        _filterPriority = null;
+        _filterStatus     = null;
+        _filterPriority   = null;
         _filterAssignedTo = null;
-        await LoadTodos();
+        await OnFilterChanged();
     }
 
     private async Task OpenCreateDialog()
@@ -130,7 +297,12 @@
         var dialog = await DialogService.ShowAsync<CreateTodoDialog>("New Todo", parameters);
         var result = await dialog.Result;
         if (result is { Canceled: false })
-            await LoadTodos();
+        {
+            if (_isKanban)
+                await LoadKanbanData();
+            else if (_grid is not null)
+                await _grid.ReloadServerData();
+        }
     }
 
     private async Task DeleteTodo(Todo todo)
@@ -146,7 +318,8 @@
         {
             await TodoService.DeleteAsync(todo.Id);
             Snackbar.Add("Todo deleted", Severity.Success);
-            await LoadTodos();
+            if (_grid is not null)
+                await _grid.ReloadServerData();
         }
     }
 
@@ -154,7 +327,8 @@
     {
         await TodoService.ReleaseClaimAsync(todo.Id);
         Snackbar.Add($"Claim released for \"{todo.Title}\"", Severity.Info);
-        await LoadTodos();
+        if (_grid is not null)
+            await _grid.ReloadServerData();
     }
 
     public async ValueTask DisposeAsync()

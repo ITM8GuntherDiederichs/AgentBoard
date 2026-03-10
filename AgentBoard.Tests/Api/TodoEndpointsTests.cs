@@ -27,15 +27,20 @@ public class TodoEndpointsTests : IClassFixture<AgentBoardWebFactory>
     // -------------------------------------------------------------------------
 
     [Fact]
-    public async Task GetAll_Returns200_WithJsonArray()
+    public async Task GetAll_Returns200_WithPagedResult()
     {
         // Uses the shared factory DB — may already contain todos created by other tests.
-        // Verifies the endpoint responds 200 and returns a valid JSON array.
+        // Verifies the endpoint responds 200 and returns a valid PagedResult.
         var response = await _client.GetAsync("/api/todos");
 
         Assert.Equal(HttpStatusCode.OK, response.StatusCode);
-        var todos = await response.Content.ReadFromJsonAsync<List<TodoDto>>();
-        Assert.NotNull(todos);
+        var result = await response.Content.ReadFromJsonAsync<PagedResultDto<TodoDto>>();
+        Assert.NotNull(result);
+        Assert.NotNull(result.Items);
+        Assert.True(result.Page >= 1);
+        Assert.True(result.PageSize >= 1);
+        Assert.True(result.TotalCount >= 0);
+        Assert.True(result.TotalPages >= 0);
     }
 
     [Fact]
@@ -48,10 +53,45 @@ public class TodoEndpointsTests : IClassFixture<AgentBoardWebFactory>
         var response = await _client.GetAsync($"/api/todos?assignedTo={uniqueAgent}");
 
         Assert.Equal(HttpStatusCode.OK, response.StatusCode);
-        var todos = await response.Content.ReadFromJsonAsync<List<TodoDto>>();
-        Assert.NotNull(todos);
-        Assert.Single(todos);
-        Assert.Equal(uniqueAgent, todos[0].AssignedTo);
+        var result = await response.Content.ReadFromJsonAsync<PagedResultDto<TodoDto>>();
+        Assert.NotNull(result);
+        Assert.Single(result.Items);
+        Assert.Equal(uniqueAgent, result.Items[0].AssignedTo);
+    }
+
+    [Fact]
+    public async Task GetAll_Returns_DefaultPage1_PageSize25()
+    {
+        var response = await _client.GetAsync("/api/todos");
+
+        Assert.Equal(HttpStatusCode.OK, response.StatusCode);
+        var result = await response.Content.ReadFromJsonAsync<PagedResultDto<TodoDto>>();
+        Assert.NotNull(result);
+        Assert.Equal(1, result.Page);
+        Assert.Equal(25, result.PageSize);
+    }
+
+    [Fact]
+    public async Task GetAll_RespectsPageAndPageSizeParams()
+    {
+        var response = await _client.GetAsync("/api/todos?page=2&pageSize=10");
+
+        Assert.Equal(HttpStatusCode.OK, response.StatusCode);
+        var result = await response.Content.ReadFromJsonAsync<PagedResultDto<TodoDto>>();
+        Assert.NotNull(result);
+        Assert.Equal(2, result.Page);
+        Assert.Equal(10, result.PageSize);
+    }
+
+    [Fact]
+    public async Task GetAll_ClampsPageSizeTo100()
+    {
+        var response = await _client.GetAsync("/api/todos?pageSize=999");
+
+        Assert.Equal(HttpStatusCode.OK, response.StatusCode);
+        var result = await response.Content.ReadFromJsonAsync<PagedResultDto<TodoDto>>();
+        Assert.NotNull(result);
+        Assert.Equal(100, result.PageSize);
     }
 
     // -------------------------------------------------------------------------
@@ -256,6 +296,114 @@ public class TodoEndpointsTests : IClassFixture<AgentBoardWebFactory>
     }
 
     // -------------------------------------------------------------------------
+    // GET /api/todos/{id}/events
+    // -------------------------------------------------------------------------
+
+    [Fact]
+    public async Task GetEvents_Returns200_WithEmptyList_ForNewTodo()
+    {
+        // A freshly created todo should have at least the "Created" audit event.
+        var created = await CreateTodoAsync("Events Todo");
+
+        var response = await _client.GetAsync($"/api/todos/{created.Id}/events");
+
+        Assert.Equal(HttpStatusCode.OK, response.StatusCode);
+        var events = await response.Content.ReadFromJsonAsync<List<TodoEventDto>>();
+        Assert.NotNull(events);
+        // CreateAsync records a "Created" event
+        Assert.Contains(events, e => e.EventType == "Created");
+    }
+
+    [Fact]
+    public async Task GetEvents_RecordsCreatedEvent_OnCreate()
+    {
+        var created = await CreateTodoAsync("Audit Create");
+
+        var events = await GetEventsAsync(created.Id);
+
+        Assert.Single(events, e => e.EventType == "Created");
+        Assert.All(events.Where(e => e.EventType == "Created"), e =>
+            Assert.Equal(created.Id, e.TodoId));
+    }
+
+    [Fact]
+    public async Task GetEvents_RecordsUpdatedEvent_OnPut()
+    {
+        var created = await CreateTodoAsync("Audit Update");
+        var updateRequest = new UpdateTodoRequest
+        {
+            Title = "Updated Title",
+            Status = TodoStatus.InProgress,
+            Priority = TodoPriority.High
+        };
+
+        await _client.PutAsJsonAsync($"/api/todos/{created.Id}", updateRequest);
+
+        var events = await GetEventsAsync(created.Id);
+        Assert.Contains(events, e => e.EventType == "Updated");
+    }
+
+    [Fact]
+    public async Task GetEvents_RecordsClaimedEvent_OnClaim()
+    {
+        var created = await CreateTodoAsync("Audit Claim");
+
+        await _client.PostAsJsonAsync($"/api/todos/{created.Id}/claim",
+            new ClaimRequest { AgentId = "audit-agent" });
+
+        var events = await GetEventsAsync(created.Id);
+        var claimedEvent = Assert.Single(events, e => e.EventType == "Claimed");
+        Assert.Equal("audit-agent", claimedEvent.Actor);
+    }
+
+    [Fact]
+    public async Task GetEvents_RecordsReleasedEvent_OnReleaseClaim()
+    {
+        var created = await CreateTodoAsync("Audit Release");
+        await _client.PostAsJsonAsync($"/api/todos/{created.Id}/claim",
+            new ClaimRequest { AgentId = "audit-agent" });
+
+        await _client.DeleteAsync($"/api/todos/{created.Id}/claim");
+
+        var events = await GetEventsAsync(created.Id);
+        Assert.Contains(events, e => e.EventType == "Released");
+    }
+
+    [Fact]
+    public async Task GetEvents_Returns200_ForDeletedTodo_EventsSurvive()
+    {
+        // Events must survive todo deletion (no FK constraint).
+        var created = await CreateTodoAsync("Audit Delete");
+        var todoId = created.Id;
+
+        await _client.DeleteAsync($"/api/todos/{todoId}");
+
+        // The todo is gone but events endpoint still returns events
+        var response = await _client.GetAsync($"/api/todos/{todoId}/events");
+        Assert.Equal(HttpStatusCode.OK, response.StatusCode);
+        var events = await response.Content.ReadFromJsonAsync<List<TodoEventDto>>();
+        Assert.NotNull(events);
+        Assert.Contains(events, e => e.EventType == "Deleted");
+    }
+
+    [Fact]
+    public async Task GetEvents_ReturnsEventsOrderedByOccurredAtDescending()
+    {
+        var created = await CreateTodoAsync("Audit Order");
+
+        // Create two more events by patching
+        await _client.PatchAsJsonAsync($"/api/todos/{created.Id}",
+            new PatchTodoRequest { Status = TodoStatus.InProgress });
+        await _client.PatchAsJsonAsync($"/api/todos/{created.Id}",
+            new PatchTodoRequest { Status = TodoStatus.Done });
+
+        var events = await GetEventsAsync(created.Id);
+        Assert.True(events.Count >= 2);
+        for (var i = 0; i < events.Count - 1; i++)
+            Assert.True(events[i].OccurredAt >= events[i + 1].OccurredAt);
+    }
+
+    // -------------------------------------------------------------------------
     // Private helpers
     // -------------------------------------------------------------------------
 
@@ -272,6 +420,23 @@ public class TodoEndpointsTests : IClassFixture<AgentBoardWebFactory>
         return todo!;
     }
 
+    private async Task<List<TodoEventDto>> GetEventsAsync(Guid todoId)
+    {
+        var response = await _client.GetAsync($"/api/todos/{todoId}/events");
+        response.EnsureSuccessStatusCode();
+        return (await response.Content.ReadFromJsonAsync<List<TodoEventDto>>())!;
+    }
+
+    /// <summary>
+    /// Local DTO matching the PagedResult shape returned by GET /api/todos.
+    /// </summary>
+    private sealed record PagedResultDto<T>(
+        List<T> Items,
+        int TotalCount,
+        int Page,
+        int PageSize,
+        int TotalPages);
+
     /// <summary>
     /// Local DTO matching the shape returned by the API (the Todo entity is serialised directly).
     /// </summary>
@@ -286,4 +451,16 @@ public class TodoEndpointsTests : IClassFixture<AgentBoardWebFactory>
         DateTime? ClaimedAt,
         DateTime CreatedAt,
         DateTime UpdatedAt);
+
+    /// <summary>
+    /// Local DTO matching the TodoEvent shape returned by GET /api/todos/{id}/events.
+    /// </summary>
+    private sealed record TodoEventDto(
+        Guid Id,
+        Guid TodoId,
+        string TodoTitle,
+        string EventType,
+        string? Actor,
+        string? Details,
+        DateTime OccurredAt);
 }
