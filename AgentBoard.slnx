@@ -1,0 +1,5 @@
+<Solution>
+  <Project Path="AgentBoard.E2E/AgentBoard.E2E.csproj" />
+  <Project Path="AgentBoard.Tests/AgentBoard.Tests.csproj" />
+  <Project Path="AgentBoard/AgentBoard.csproj" />
+</Solution>
