@@ -1,13 +1,15 @@
 using AgentBoard.Contracts;
 using AgentBoard.Data;
 using AgentBoard.Data.Models;
+using AgentBoard.Hubs;
+using Microsoft.AspNetCore.SignalR;
 using Microsoft.EntityFrameworkCore;
 
 namespace AgentBoard.Services;
 
-public class TodoService(IDbContextFactory<ApplicationDbContext> factory)
+public class TodoService(IDbContextFactory<ApplicationDbContext> factory, IHubContext<AgentBoardHub> hub)
 {
-    public async Task<List<Todo>> GetAllAsync(TodoStatus? status, TodoPriority? priority, string? assignedTo, string? claimedBy)
+    public async Task<List<Todo>> GetAllAsync(TodoStatus? status, TodoPriority? priority, string? assignedTo, string? claimedBy, DateTime? dueBefore = null)
     {
         using var db = await factory.CreateDbContextAsync();
         var q = db.Todos.AsQueryable();
@@ -15,6 +17,7 @@ public class TodoService(IDbContextFactory<ApplicationDbContext> factory)
         if (priority.HasValue) q = q.Where(t => t.Priority == priority.Value);
         if (!string.IsNullOrEmpty(assignedTo)) q = q.Where(t => t.AssignedTo == assignedTo);
         if (!string.IsNullOrEmpty(claimedBy)) q = q.Where(t => t.ClaimedBy == claimedBy);
+        if (dueBefore.HasValue) q = q.Where(t => t.DueAt.HasValue && t.DueAt.Value <= dueBefore.Value);
         return await q.OrderByDescending(t => t.Priority).ThenBy(t => t.CreatedAt).ToListAsync();
     }
 
@@ -32,10 +35,12 @@ public class TodoService(IDbContextFactory<ApplicationDbContext> factory)
             Title = request.Title,
             Description = request.Description,
             Priority = request.Priority,
-            AssignedTo = request.AssignedTo
+            AssignedTo = request.AssignedTo,
+            DueAt = request.DueAt
         };
         db.Todos.Add(todo);
         await db.SaveChangesAsync();
+        await NotifyAsync("created", todo);
         return todo;
     }
 
@@ -49,7 +54,9 @@ public class TodoService(IDbContextFactory<ApplicationDbContext> factory)
         todo.Status = request.Status;
         todo.Priority = request.Priority;
         todo.AssignedTo = request.AssignedTo;
+        todo.DueAt = request.DueAt;
         await db.SaveChangesAsync();
+        await NotifyAsync("updated", todo);
         return todo;
     }
 
@@ -60,7 +67,9 @@ public class TodoService(IDbContextFactory<ApplicationDbContext> factory)
         if (todo is null) return null;
         if (request.Status.HasValue) todo.Status = request.Status.Value;
         if (request.Priority.HasValue) todo.Priority = request.Priority.Value;
+        if (request.DueAt.HasValue) todo.DueAt = request.DueAt.Value;
         await db.SaveChangesAsync();
+        await NotifyAsync("updated", todo);
         return todo;
     }
 
@@ -71,10 +80,11 @@ public class TodoService(IDbContextFactory<ApplicationDbContext> factory)
         if (todo is null) return false;
         db.Todos.Remove(todo);
         await db.SaveChangesAsync();
+        await NotifyAsync("deleted", new Todo { Id = id });
         return true;
     }
 
-    public async Task<(Todo? todo, bool conflict, string? conflictAgent)> ClaimAsync(Guid id, string agentId)
+    public async Task<(Todo? todo, bool conflict, string? conflictAgent)> ClaimAsync(Guid id, string agentId, int ttlMinutes = 30)
     {
         using var db = await factory.CreateDbContextAsync();
         var todo = await db.Todos.FindAsync(id);
@@ -83,7 +93,9 @@ public class TodoService(IDbContextFactory<ApplicationDbContext> factory)
             return (todo, true, todo.ClaimedBy);
         todo.ClaimedBy = agentId;
         todo.ClaimedAt = DateTime.UtcNow;
+        todo.ClaimExpiresAt = DateTime.UtcNow.AddMinutes(ttlMinutes);
         await db.SaveChangesAsync();
+        await NotifyAsync("claimed", todo);
         return (todo, false, null);
     }
 
@@ -94,7 +106,13 @@ public class TodoService(IDbContextFactory<ApplicationDbContext> factory)
         if (todo is null) return null;
         todo.ClaimedBy = null;
         todo.ClaimedAt = null;
+        todo.ClaimExpiresAt = null;
         await db.SaveChangesAsync();
+        await NotifyAsync("released", todo);
         return todo;
     }
+
+    private async Task NotifyAsync(string eventType, Todo todo)
+        => await hub.Clients.All.SendAsync("TodoUpdated", new { eventType, todo });
 }
+

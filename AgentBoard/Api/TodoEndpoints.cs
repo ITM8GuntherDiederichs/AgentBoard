@@ -10,8 +10,8 @@ public static class TodoEndpoints
     {
         var group = app.MapGroup("/api/todos").WithTags("todos");
 
-        group.MapGet("/", async (TodoService svc, TodoStatus? status, TodoPriority? priority, string? assignedTo, string? claimedBy)
-            => Results.Ok(await svc.GetAllAsync(status, priority, assignedTo, claimedBy)));
+        group.MapGet("/", async (TodoService svc, TodoStatus? status, TodoPriority? priority, string? assignedTo, string? claimedBy, DateTime? dueBefore)
+            => Results.Ok(await svc.GetAllAsync(status, priority, assignedTo, claimedBy, dueBefore)));
 
         group.MapGet("/{id:guid}", async (Guid id, TodoService svc) =>
         {
@@ -45,7 +45,7 @@ public static class TodoEndpoints
 
         group.MapPost("/{id:guid}/claim", async (Guid id, ClaimRequest request, TodoService svc) =>
         {
-            var (todo, conflict, conflictAgent) = await svc.ClaimAsync(id, request.AgentId);
+            var (todo, conflict, conflictAgent) = await svc.ClaimAsync(id, request.AgentId, request.TtlMinutes);
             if (todo is null) return Results.NotFound();
             if (conflict) return Results.Conflict(new { error = $"Todo is already claimed by {conflictAgent}", claimedBy = conflictAgent, claimedAt = todo.ClaimedAt });
             return Results.Ok(todo);
