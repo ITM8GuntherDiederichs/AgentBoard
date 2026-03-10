@@ -98,7 +98,8 @@ public class TodoServiceTests
 
         var result = await svc.GetAllAsync(null, null, null, null);
 
-        Assert.Equal(2, result.Count);
+        Assert.Equal(2, result.TotalCount);
+        Assert.Equal(2, result.Items.Count);
     }
 
     [Fact]
@@ -112,8 +113,9 @@ public class TodoServiceTests
 
         var result = await svc.GetAllAsync(TodoStatus.InProgress, null, null, null);
 
-        Assert.Single(result);
-        Assert.Equal(TodoStatus.InProgress, result[0].Status);
+        Assert.Equal(1, result.TotalCount);
+        Assert.Single(result.Items);
+        Assert.Equal(TodoStatus.InProgress, result.Items[0].Status);
     }
 
     [Fact]
@@ -125,8 +127,9 @@ public class TodoServiceTests
 
         var result = await svc.GetAllAsync(null, TodoPriority.High, null, null);
 
-        Assert.Single(result);
-        Assert.Equal(TodoPriority.High, result[0].Priority);
+        Assert.Equal(1, result.TotalCount);
+        Assert.Single(result.Items);
+        Assert.Equal(TodoPriority.High, result.Items[0].Priority);
     }
 
     [Fact]
@@ -138,8 +141,9 @@ public class TodoServiceTests
 
         var result = await svc.GetAllAsync(null, null, "alice", null);
 
-        Assert.Single(result);
-        Assert.Equal("alice", result[0].AssignedTo);
+        Assert.Equal(1, result.TotalCount);
+        Assert.Single(result.Items);
+        Assert.Equal("alice", result.Items[0].AssignedTo);
     }
 
     [Fact]
@@ -152,8 +156,38 @@ public class TodoServiceTests
 
         var result = await svc.GetAllAsync(null, null, null, "agent-x");
 
-        Assert.Single(result);
-        Assert.Equal("agent-x", result[0].ClaimedBy);
+        Assert.Equal(1, result.TotalCount);
+        Assert.Single(result.Items);
+        Assert.Equal("agent-x", result.Items[0].ClaimedBy);
+    }
+
+    [Fact]
+    public async Task GetAllAsync_Pagination_ReturnsCorrectPage()
+    {
+        var svc = BuildService();
+        for (var i = 1; i <= 5; i++)
+            await svc.CreateAsync(MakeCreateRequest($"Task {i}"));
+
+        var page1 = await svc.GetAllAsync(null, null, null, null, page: 1, pageSize: 2);
+        var page2 = await svc.GetAllAsync(null, null, null, null, page: 2, pageSize: 2);
+        var page3 = await svc.GetAllAsync(null, null, null, null, page: 3, pageSize: 2);
+
+        Assert.Equal(5, page1.TotalCount);
+        Assert.Equal(3, page1.TotalPages);
+        Assert.Equal(2, page1.Items.Count);
+        Assert.Equal(2, page2.Items.Count);
+        Assert.Single(page3.Items);
+    }
+
+    [Fact]
+    public async Task GetAllAsync_ClampsPageSizeTo100()
+    {
+        var svc = BuildService();
+        await svc.CreateAsync(MakeCreateRequest("A"));
+
+        var result = await svc.GetAllAsync(null, null, null, null, pageSize: 9999);
+
+        Assert.Equal(100, result.PageSize);
     }
 
     // -------------------------------------------------------------------------
@@ -419,6 +453,7 @@ public class TodoServiceTests
 
         var events = await svc.GetEventsAsync(todoId);
         Assert.Contains(events, e => e.EventType == "Deleted");
+        // Title snapshot is preserved even though the Todo is gone
         Assert.All(events.Where(e => e.EventType == "Deleted"),
             e => Assert.Equal("Delete Audit", e.TodoTitle));
     }
