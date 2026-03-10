@@ -15,4 +15,6 @@ public class CreateTodoRequest
 
     [MaxLength(100)]
     public string? AssignedTo { get; set; }
+
+    public DateTime? DueAt { get; set; }
 }
