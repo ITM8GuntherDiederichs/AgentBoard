@@ -1,0 +1,151 @@
+@page "/"
+@using AgentBoard.Contracts
+@using AgentBoard.Data.Models
+@using AgentBoard.Services
+@inject TodoService TodoService
+@inject IDialogService DialogService
+@inject ISnackbar Snackbar
+@implements IDisposable
+@rendermode InteractiveServer
+
+<PageTitle>AgentBoard</PageTitle>
+
+<MudStack Spacing="3">
+    <MudStack Row="true" AlignItems="AlignItems.Center" Justify="Justify.SpaceBetween">
+        <MudText Typo="Typo.h4">📋 Board</MudText>
+        <MudButton Variant="Variant.Filled" Color="Color.Primary" StartIcon="@Icons.Material.Filled.Add"
+                   OnClick="OpenCreateDialog">New Todo</MudButton>
+    </MudStack>
+
+    @* Filter bar *@
+    <MudPaper Class="pa-3" Elevation="1">
+        <MudStack Row="true" Spacing="2" Wrap="Wrap.Wrap">
+            <MudSelect T="TodoStatus?" @bind-Value="_filterStatus" @bind-Value:after="LoadTodos"
+                       Label="Status" Clearable="true" Style="min-width:140px">
+                @foreach (var s in Enum.GetValues<TodoStatus>())
+                {
+                    <MudSelectItem T="TodoStatus?" Value="@((TodoStatus?)s)">@s.ToString()</MudSelectItem>
+                }
+            </MudSelect>
+            <MudSelect T="TodoPriority?" @bind-Value="_filterPriority" @bind-Value:after="LoadTodos"
+                       Label="Priority" Clearable="true" Style="min-width:140px">
+                @foreach (var p in Enum.GetValues<TodoPriority>())
+                {
+                    <MudSelectItem T="TodoPriority?" Value="@((TodoPriority?)p)">@p.ToString()</MudSelectItem>
+                }
+            </MudSelect>
+            <MudTextField @bind-Value="_filterAssignedTo" @bind-Value:after="LoadTodos"
+                          Label="Assigned To" Style="min-width:160px" />
+            <MudButton Variant="Variant.Outlined" OnClick="ClearFilters">Clear</MudButton>
+        </MudStack>
+    </MudPaper>
+
+    @* Todo table *@
+    <MudDataGrid T="Todo" Items="_todos" SortMode="SortMode.Multiple" Hover="true" Dense="true" Style="cursor:pointer">
+        <Columns>
+            <PropertyColumn Property="t => t.Title" Title="Title" />
+            <TemplateColumn Title="Status">
+                <CellTemplate>
+                    <StatusBadge Status="@context.Item.Status" />
+                </CellTemplate>
+            </TemplateColumn>
+            <TemplateColumn Title="Priority">
+                <CellTemplate>
+                    <PriorityBadge Priority="@context.Item.Priority" />
+                </CellTemplate>
+            </TemplateColumn>
+            <PropertyColumn Property="t => t.AssignedTo" Title="Assigned To" />
+            <TemplateColumn Title="Claimed By">
+                <CellTemplate>
+                    <ClaimIndicator Todo="@context.Item" OnRelease="@(() => ReleaseClaim(context.Item))" />
+                </CellTemplate>
+            </TemplateColumn>
+            <PropertyColumn Property="t => t.UpdatedAt" Title="Updated" Format="yyyy-MM-dd HH:mm" />
+            <TemplateColumn Title="Actions" CellClass="d-flex justify-end">
+                <CellTemplate>
+                    <MudStack Row="true" Spacing="0">
+                        <MudIconButton Icon="@Icons.Material.Filled.Edit" Size="Size.Small"
+                                       Href="@($"/todo/{context.Item.Id}")" />
+                        <MudIconButton Icon="@Icons.Material.Filled.Delete" Size="Size.Small" Color="Color.Error"
+                                       OnClick="@(() => DeleteTodo(context.Item))" />
+                    </MudStack>
+                </CellTemplate>
+            </TemplateColumn>
+        </Columns>
+    </MudDataGrid>
+
+    <MudText Typo="Typo.caption" Style="opacity:0.5">Auto-refreshes every 5 seconds · @_todos.Count todo(s)</MudText>
+</MudStack>
+
+@code {
+    private List<Todo> _todos = [];
+    private TodoStatus? _filterStatus;
+    private TodoPriority? _filterPriority;
+    private string? _filterAssignedTo;
+    private Timer? _timer;
+    private string? _initError;
+
+    protected override async Task OnInitializedAsync()
+    {
+        try
+        {
+            await LoadTodos();
+            _timer = new Timer(async _ =>
+            {
+                await LoadTodos();
+                await InvokeAsync(StateHasChanged);
+            }, null, TimeSpan.FromSeconds(5), TimeSpan.FromSeconds(5));
+        }
+        catch (Exception ex)
+        {
+            _initError = ex.Message;
+        }
+    }
+
+    private async Task LoadTodos()
+        => _todos = await TodoService.GetAllAsync(_filterStatus, _filterPriority, _filterAssignedTo, null);
+
+    private async Task ClearFilters()
+    {
+        _filterStatus = null;
+        _filterPriority = null;
+        _filterAssignedTo = null;
+        await LoadTodos();
+    }
+
+    private async Task OpenCreateDialog()
+    {
+        var model = new CreateTodoRequest();
+        var parameters = new DialogParameters<CreateTodoDialog> { { x => x.Model, model } };
+        var dialog = await DialogService.ShowAsync<CreateTodoDialog>("New Todo", parameters);
+        var result = await dialog.Result;
+        if (result is { Canceled: false })
+            await LoadTodos();
+    }
+
+    private async Task DeleteTodo(Todo todo)
+    {
+        var parameters = new DialogParameters<ConfirmDialog>
+        {
+            { x => x.ContentText, $"Delete \"{todo.Title}\"? This cannot be undone." },
+            { x => x.ButtonText, "Delete" }
+        };
+        var dialog = await DialogService.ShowAsync<ConfirmDialog>("Confirm Delete", parameters);
+        var result = await dialog.Result;
+        if (result is { Canceled: false })
+        {
+            await TodoService.DeleteAsync(todo.Id);
+            Snackbar.Add("Todo deleted", Severity.Success);
+            await LoadTodos();
+        }
+    }
+
+    private async Task ReleaseClaim(Todo todo)
+    {
+        await TodoService.ReleaseClaimAsync(todo.Id);
+        Snackbar.Add($"Claim released for \"{todo.Title}\"", Severity.Info);
+        await LoadTodos();
+    }
+
+    public void Dispose() => _timer?.Dispose();
+}

@@ -1,0 +1,16 @@
+@using AgentBoard.Data.Models
+
+<MudChip T="string" Color="@GetColor()" Size="Size.Small" Label="true">@Status.ToString()</MudChip>
+
+@code {
+    [Parameter, EditorRequired] public TodoStatus Status { get; set; }
+
+    private Color GetColor() => Status switch
+    {
+        TodoStatus.Pending => Color.Default,
+        TodoStatus.InProgress => Color.Info,
+        TodoStatus.Blocked => Color.Warning,
+        TodoStatus.Done => Color.Success,
+        _ => Color.Default
+    };
+}

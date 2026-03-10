@@ -1,0 +1,31 @@
+@using AgentBoard.Contracts
+@using AgentBoard.Data.Models
+
+<MudForm @ref="_form" @bind-IsValid="_isValid">
+    <MudStack Spacing="3">
+        <MudTextField @bind-Value="Model.Title" Label="Title" Required="true" RequiredError="Title is required"
+                      MaxLength="200" Counter="200" />
+        <MudTextField @bind-Value="Model.Description" Label="Description" Lines="3"
+                      MaxLength="2000" Counter="2000" />
+        <MudSelect @bind-Value="Model.Priority" Label="Priority" T="TodoPriority">
+            @foreach (var p in Enum.GetValues<TodoPriority>())
+            {
+                <MudSelectItem T="TodoPriority" Value="@p">@p.ToString()</MudSelectItem>
+            }
+        </MudSelect>
+        <MudTextField @bind-Value="Model.AssignedTo" Label="Assigned To (agent ID)" MaxLength="100" />
+    </MudStack>
+</MudForm>
+
+@code {
+    [Parameter, EditorRequired] public CreateTodoRequest Model { get; set; } = default!;
+
+    private MudForm _form = default!;
+    private bool _isValid;
+
+    public async Task<bool> ValidateAsync()
+    {
+        await _form.ValidateAsync();
+        return _isValid;
+    }
+}

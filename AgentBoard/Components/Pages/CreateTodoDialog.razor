@@ -1,0 +1,29 @@
+@using AgentBoard.Contracts
+@using AgentBoard.Services
+@inject TodoService TodoService
+
+<MudDialog>
+    <DialogContent>
+        <TodoForm @ref="_form" Model="Model" />
+    </DialogContent>
+    <DialogActions>
+        <MudButton OnClick="Cancel">Cancel</MudButton>
+        <MudButton Color="Color.Primary" Variant="Variant.Filled" OnClick="Submit">Create</MudButton>
+    </DialogActions>
+</MudDialog>
+
+@code {
+    [CascadingParameter] IMudDialogInstance MudDialog { get; set; } = default!;
+    [Parameter, EditorRequired] public CreateTodoRequest Model { get; set; } = default!;
+
+    private TodoForm _form = default!;
+
+    private async Task Submit()
+    {
+        if (!await _form.ValidateAsync()) return;
+        await TodoService.CreateAsync(Model);
+        MudDialog.Close(DialogResult.Ok(true));
+    }
+
+    private void Cancel() => MudDialog.Cancel();
+}
