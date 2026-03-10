@@ -1,4 +1,5 @@
 @echo off
 cd /d %~dp0AgentBoard
+dotnet build --configuration Debug -v q
 set ASPNETCORE_ENVIRONMENT=Development
-dotnet run --urls http://localhost:5227
+dotnet exec bin\Debug\net10.0\AgentBoard.dll --urls http://localhost:5227
