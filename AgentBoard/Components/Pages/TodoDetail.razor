@@ -9,19 +9,16 @@
 
 <PageTitle>Todo Detail — AgentBoard</PageTitle>
 
-@* Spinner shown while loading *@
 <div style="@(_loaded ? "display:none" : "")">
     <MudProgressCircular Indeterminate="true" />
 </div>
 
-@* Not found *@
 @if (_loaded && _notFound)
 {
     <MudAlert Severity="Severity.Warning">Todo not found.</MudAlert>
     <MudButton Class="mt-2" OnClick='() => Nav.NavigateTo("/")'>Back to Board</MudButton>
 }
 
-@* Detail form — always in DOM so MudSelect is never dynamically inserted *@
 <div style="@(!_loaded || _notFound ? "display:none" : "")">
     <MudStack Spacing="3" Style="max-width:700px">
         <MudStack Row="true" AlignItems="AlignItems.Center" Spacing="2">
@@ -67,16 +64,54 @@
                 Updated: @_todo.UpdatedAt.ToString("yyyy-MM-dd HH:mm") UTC
             </MudText>
         </MudPaper>
+
+        <MudPaper Class="pa-4" Elevation="1">
+            <MudText Typo="Typo.h6" Class="mb-3">
+                <MudIcon Icon="@Icons.Material.Filled.History" Class="mr-1" Style="vertical-align:middle;" />
+                Audit History
+            </MudText>
+            @if (_events.Count == 0)
+            {
+                <MudText Typo="Typo.body2">No audit events recorded yet.</MudText>
+            }
+            else
+            {
+                <MudTimeline TimelinePosition="TimelinePosition.Start">
+                    @foreach (var ev in _events)
+                    {
+                        <MudTimelineItem Color="@EventColor(ev.EventType)" Size="Size.Small">
+                            <ItemContent>
+                                <MudStack Spacing="0">
+                                    <MudStack Row="true" AlignItems="AlignItems.Center" Spacing="1">
+                                        <MudChip T="string" Size="Size.Small" Color="@EventColor(ev.EventType)" Variant="Variant.Filled">@ev.EventType</MudChip>
+                                        @if (!string.IsNullOrEmpty(ev.Actor))
+                                        {
+                                            <MudText Typo="Typo.caption">by <strong>@ev.Actor</strong></MudText>
+                                        }
+                                        <MudSpacer />
+                                        <MudText Typo="Typo.caption">@ev.OccurredAt.ToString("yyyy-MM-dd HH:mm:ss") UTC</MudText>
+                                    </MudStack>
+                                    @if (!string.IsNullOrEmpty(ev.Details))
+                                    {
+                                        <MudText Typo="Typo.caption" Class="mt-1">@ev.Details</MudText>
+                                    }
+                                </MudStack>
+                            </ItemContent>
+                        </MudTimelineItem>
+                    }
+                </MudTimeline>
+            }
+        </MudPaper>
     </MudStack>
 </div>
 
 @code {
     [Parameter] public Guid Id { get; set; }
 
-    // Non-nullable sentinel — MudSelect always has a valid binding target (never null).
     private Todo _todo = new();
     private bool _loaded;
     private bool _notFound;
+    private List<TodoEvent> _events = [];
 
     protected override async Task OnInitializedAsync()
     {
@@ -84,9 +119,14 @@
         {
             var result = await TodoService.GetByIdAsync(Id);
             if (result is not null)
+            {
                 _todo = result;
+                _events = await TodoService.GetEventsAsync(Id, max: 20);
+            }
             else
+            {
                 _notFound = true;
+            }
             _loaded = true;
         }
         catch (Exception ex)
@@ -117,6 +157,18 @@
         await TodoService.ReleaseClaimAsync(_todo.Id);
         var updated = await TodoService.GetByIdAsync(_todo.Id);
         if (updated is not null) _todo = updated;
+        _events = await TodoService.GetEventsAsync(Id, max: 20);
         Snackbar.Add("Claim released", Severity.Info);
     }
+
+    private static Color EventColor(string eventType) => eventType switch
+    {
+        "Created"  => Color.Success,
+        "Updated"  => Color.Info,
+        "Claimed"  => Color.Warning,
+        "Released" => Color.Default,
+        "Deleted"  => Color.Error,
+        _          => Color.Default
+    };
 }
+

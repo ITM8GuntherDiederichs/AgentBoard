@@ -361,4 +361,130 @@ public class TodoServiceTests
         var result = await svc.ReleaseClaimAsync(Guid.NewGuid());
         Assert.Null(result);
     }
+
+    // -------------------------------------------------------------------------
+    // Audit log — LogEventAsync / GetEventsAsync
+    // -------------------------------------------------------------------------
+
+    [Fact]
+    public async Task CreateAsync_RecordsCreatedEvent()
+    {
+        var svc = BuildService();
+        var created = await svc.CreateAsync(MakeCreateRequest("Audit Create"));
+
+        var events = await svc.GetEventsAsync(created.Id);
+
+        Assert.Single(events, e => e.EventType == "Created");
+        Assert.Equal(created.Id, events[0].TodoId);
+        Assert.Equal("Audit Create", events[0].TodoTitle);
+    }
+
+    [Fact]
+    public async Task UpdateAsync_RecordsUpdatedEvent()
+    {
+        var svc = BuildService();
+        var created = await svc.CreateAsync(MakeCreateRequest("Before"));
+        await svc.UpdateAsync(created.Id, new UpdateTodoRequest
+        {
+            Title = "After",
+            Status = TodoStatus.InProgress,
+            Priority = TodoPriority.High
+        });
+
+        var events = await svc.GetEventsAsync(created.Id);
+
+        Assert.Contains(events, e => e.EventType == "Updated");
+    }
+
+    [Fact]
+    public async Task PatchAsync_RecordsUpdatedEvent()
+    {
+        var svc = BuildService();
+        var created = await svc.CreateAsync(MakeCreateRequest("Patch Me"));
+        await svc.PatchAsync(created.Id, new PatchTodoRequest { Status = TodoStatus.Done });
+
+        var events = await svc.GetEventsAsync(created.Id);
+
+        Assert.Contains(events, e => e.EventType == "Patched");
+    }
+
+    [Fact]
+    public async Task DeleteAsync_RecordsDeletedEvent_WithTitleSnapshot()
+    {
+        var svc = BuildService();
+        var created = await svc.CreateAsync(MakeCreateRequest("Delete Audit"));
+        var todoId = created.Id;
+
+        await svc.DeleteAsync(todoId);
+
+        var events = await svc.GetEventsAsync(todoId);
+        Assert.Contains(events, e => e.EventType == "Deleted");
+        Assert.All(events.Where(e => e.EventType == "Deleted"),
+            e => Assert.Equal("Delete Audit", e.TodoTitle));
+    }
+
+    [Fact]
+    public async Task ClaimAsync_RecordsClaimedEvent_WithActorAndDetails()
+    {
+        var svc = BuildService();
+        var created = await svc.CreateAsync(MakeCreateRequest());
+
+        await svc.ClaimAsync(created.Id, "claim-agent", ttlMinutes: 15);
+
+        var events = await svc.GetEventsAsync(created.Id);
+        var claimedEvent = Assert.Single(events, e => e.EventType == "Claimed");
+        Assert.Equal("claim-agent", claimedEvent.Actor);
+        Assert.Contains("15", claimedEvent.Details ?? "");
+    }
+
+    [Fact]
+    public async Task ReleaseClaimAsync_RecordsReleasedEvent()
+    {
+        var svc = BuildService();
+        var created = await svc.CreateAsync(MakeCreateRequest());
+        await svc.ClaimAsync(created.Id, "holder-agent");
+
+        await svc.ReleaseClaimAsync(created.Id);
+
+        var events = await svc.GetEventsAsync(created.Id);
+        Assert.Contains(events, e => e.EventType == "Released");
+    }
+
+    [Fact]
+    public async Task GetEventsAsync_ReturnsEventsOrderedByOccurredAtDescending()
+    {
+        var svc = BuildService();
+        var created = await svc.CreateAsync(MakeCreateRequest("Order Test"));
+        await svc.UpdateAsync(created.Id, new UpdateTodoRequest
+        {
+            Title = "Updated",
+            Priority = TodoPriority.High,
+            Status = TodoStatus.InProgress
+        });
+
+        var events = await svc.GetEventsAsync(created.Id);
+
+        Assert.True(events.Count >= 2);
+        for (var i = 0; i < events.Count - 1; i++)
+            Assert.True(events[i].OccurredAt >= events[i + 1].OccurredAt);
+    }
+
+    [Fact]
+    public async Task GetEventsAsync_RespectsMaxResults()
+    {
+        var svc = BuildService();
+        var created = await svc.CreateAsync(MakeCreateRequest());
+        // Generate 5 additional "Updated" events via the public UpdateAsync mutation
+        for (var i = 0; i < 5; i++)
+            await svc.UpdateAsync(created.Id, new UpdateTodoRequest
+            {
+                Title = created.Title,
+                Status = TodoStatus.InProgress,
+                Priority = TodoPriority.Medium
+            });
+
+        var events = await svc.GetEventsAsync(created.Id, max: 3);
+
+        Assert.Equal(3, events.Count);
+    }
 }

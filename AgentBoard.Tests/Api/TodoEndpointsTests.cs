@@ -286,4 +286,112 @@ public class TodoEndpointsTests : IClassFixture<AgentBoardWebFactory>
         DateTime? ClaimedAt,
         DateTime CreatedAt,
         DateTime UpdatedAt);
+
+    // -------------------------------------------------------------------------
+    // GET /api/todos/{id}/events
+    // -------------------------------------------------------------------------
+
+    [Fact]
+    public async Task GetEvents_Returns200_AndContainsCreatedEvent_AfterCreate()
+    {
+        var created = await CreateTodoAsync("Events Todo");
+
+        var response = await _client.GetAsync($"/api/todos/{created.Id}/events");
+
+        Assert.Equal(HttpStatusCode.OK, response.StatusCode);
+        var events = await response.Content.ReadFromJsonAsync<List<TodoEventDto>>();
+        Assert.NotNull(events);
+        Assert.Contains(events, e => e.EventType == "Created");
+    }
+
+    [Fact]
+    public async Task GetEvents_RecordsUpdatedEvent_OnPut()
+    {
+        var created = await CreateTodoAsync("Audit Update");
+        await _client.PutAsJsonAsync($"/api/todos/{created.Id}", new UpdateTodoRequest
+        {
+            Title = "Updated Title",
+            Status = TodoStatus.InProgress,
+            Priority = TodoPriority.High
+        });
+
+        var events = await GetEventsAsync(created.Id);
+
+        Assert.Contains(events, e => e.EventType == "Updated");
+    }
+
+    [Fact]
+    public async Task GetEvents_RecordsClaimedEvent_OnClaim()
+    {
+        var created = await CreateTodoAsync("Audit Claim");
+        await _client.PostAsJsonAsync($"/api/todos/{created.Id}/claim",
+            new ClaimRequest { AgentId = "audit-agent" });
+
+        var events = await GetEventsAsync(created.Id);
+
+        var claimedEvent = Assert.Single(events, e => e.EventType == "Claimed");
+        Assert.Equal("audit-agent", claimedEvent.Actor);
+    }
+
+    [Fact]
+    public async Task GetEvents_RecordsReleasedEvent_OnReleaseClaim()
+    {
+        var created = await CreateTodoAsync("Audit Release");
+        await _client.PostAsJsonAsync($"/api/todos/{created.Id}/claim",
+            new ClaimRequest { AgentId = "audit-agent" });
+        await _client.DeleteAsync($"/api/todos/{created.Id}/claim");
+
+        var events = await GetEventsAsync(created.Id);
+
+        Assert.Contains(events, e => e.EventType == "Released");
+    }
+
+    [Fact]
+    public async Task GetEvents_EventsSurviveTodoDeletion()
+    {
+        var created = await CreateTodoAsync("Audit Delete");
+        var todoId = created.Id;
+
+        await _client.DeleteAsync($"/api/todos/{todoId}");
+
+        // The todo is deleted but the audit events should still be retrievable
+        var response = await _client.GetAsync($"/api/todos/{todoId}/events");
+        Assert.Equal(HttpStatusCode.OK, response.StatusCode);
+        var events = await response.Content.ReadFromJsonAsync<List<TodoEventDto>>();
+        Assert.NotNull(events);
+        Assert.Contains(events, e => e.EventType == "Deleted");
+    }
+
+    [Fact]
+    public async Task GetEvents_ReturnsEventsOrderedNewestFirst()
+    {
+        var created = await CreateTodoAsync("Audit Order");
+        await _client.PatchAsJsonAsync($"/api/todos/{created.Id}",
+            new PatchTodoRequest { Status = TodoStatus.InProgress });
+        await _client.PatchAsJsonAsync($"/api/todos/{created.Id}",
+            new PatchTodoRequest { Status = TodoStatus.Done });
+
+        var events = await GetEventsAsync(created.Id);
+
+        Assert.True(events.Count >= 2);
+        for (var i = 0; i < events.Count - 1; i++)
+            Assert.True(events[i].OccurredAt >= events[i + 1].OccurredAt);
+    }
+
+    private async Task<List<TodoEventDto>> GetEventsAsync(Guid todoId)
+    {
+        var response = await _client.GetAsync($"/api/todos/{todoId}/events");
+        response.EnsureSuccessStatusCode();
+        return (await response.Content.ReadFromJsonAsync<List<TodoEventDto>>())!;
+    }
+
+    /// <summary>Local DTO matching the TodoEvent shape returned by GET /api/todos/{id}/events.</summary>
+    private sealed record TodoEventDto(
+        Guid Id,
+        Guid TodoId,
+        string TodoTitle,
+        string EventType,
+        string? Actor,
+        string? Details,
+        DateTime OccurredAt);
 }

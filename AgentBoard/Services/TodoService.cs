@@ -27,6 +27,17 @@ public class TodoService(IDbContextFactory<ApplicationDbContext> factory, IHubCo
         return await db.Todos.FindAsync(id);
     }
 
+    /// <summary>Returns audit events for a todo ordered by OccurredAt descending, max <paramref name="max"/> events.</summary>
+    public async Task<List<TodoEvent>> GetEventsAsync(Guid todoId, int max = 20)
+    {
+        using var db = await factory.CreateDbContextAsync();
+        return await db.TodoEvents
+            .Where(e => e.TodoId == todoId)
+            .OrderByDescending(e => e.OccurredAt)
+            .Take(max)
+            .ToListAsync();
+    }
+
     public async Task<Todo> CreateAsync(CreateTodoRequest request)
     {
         using var db = await factory.CreateDbContextAsync();
@@ -40,6 +51,8 @@ public class TodoService(IDbContextFactory<ApplicationDbContext> factory, IHubCo
         };
         db.Todos.Add(todo);
         await db.SaveChangesAsync();
+        await LogEventAsync(db, todo.Id, todo.Title, "Created",
+            details: "Priority=" + todo.Priority + ", AssignedTo=" + (todo.AssignedTo ?? "none"));
         await NotifyAsync("created", todo);
         return todo;
     }
@@ -56,6 +69,8 @@ public class TodoService(IDbContextFactory<ApplicationDbContext> factory, IHubCo
         todo.AssignedTo = request.AssignedTo;
         todo.DueAt = request.DueAt;
         await db.SaveChangesAsync();
+        await LogEventAsync(db, todo.Id, todo.Title, "Updated",
+            details: "Status=" + todo.Status + ", Priority=" + todo.Priority);
         await NotifyAsync("updated", todo);
         return todo;
     }
@@ -69,6 +84,8 @@ public class TodoService(IDbContextFactory<ApplicationDbContext> factory, IHubCo
         if (request.Priority.HasValue) todo.Priority = request.Priority.Value;
         if (request.DueAt.HasValue) todo.DueAt = request.DueAt.Value;
         await db.SaveChangesAsync();
+        await LogEventAsync(db, todo.Id, todo.Title, "Patched",
+            details: "Status=" + todo.Status + ", Priority=" + todo.Priority);
         await NotifyAsync("updated", todo);
         return todo;
     }
@@ -78,8 +95,10 @@ public class TodoService(IDbContextFactory<ApplicationDbContext> factory, IHubCo
         using var db = await factory.CreateDbContextAsync();
         var todo = await db.Todos.FindAsync(id);
         if (todo is null) return false;
+        var title = todo.Title;
         db.Todos.Remove(todo);
         await db.SaveChangesAsync();
+        await LogEventAsync(db, id, title, "Deleted");
         await NotifyAsync("deleted", new Todo { Id = id });
         return true;
     }
@@ -95,6 +114,9 @@ public class TodoService(IDbContextFactory<ApplicationDbContext> factory, IHubCo
         todo.ClaimedAt = DateTime.UtcNow;
         todo.ClaimExpiresAt = DateTime.UtcNow.AddMinutes(ttlMinutes);
         await db.SaveChangesAsync();
+        await LogEventAsync(db, todo.Id, todo.Title, "Claimed",
+            actor: agentId,
+            details: "TtlMinutes=" + ttlMinutes);
         await NotifyAsync("claimed", todo);
         return (todo, false, null);
     }
@@ -104,15 +126,37 @@ public class TodoService(IDbContextFactory<ApplicationDbContext> factory, IHubCo
         using var db = await factory.CreateDbContextAsync();
         var todo = await db.Todos.FindAsync(id);
         if (todo is null) return null;
+        var previousClaimant = todo.ClaimedBy;
         todo.ClaimedBy = null;
         todo.ClaimedAt = null;
         todo.ClaimExpiresAt = null;
         await db.SaveChangesAsync();
+        await LogEventAsync(db, todo.Id, todo.Title, "Released",
+            details: previousClaimant != null ? "ReleasedFrom=" + previousClaimant : null);
         await NotifyAsync("released", todo);
         return todo;
+    }
+
+    /// <summary>Records a <see cref="TodoEvent"/> to the audit log using an existing DbContext.</summary>
+    private static async Task LogEventAsync(
+        ApplicationDbContext db,
+        Guid todoId,
+        string todoTitle,
+        string eventType,
+        string? actor = null,
+        string? details = null)
+    {
+        db.TodoEvents.Add(new TodoEvent
+        {
+            TodoId = todoId,
+            TodoTitle = todoTitle,
+            EventType = eventType,
+            Actor = actor,
+            Details = details
+        });
+        await db.SaveChangesAsync();
     }
 
     private async Task NotifyAsync(string eventType, Todo todo)
         => await hub.Clients.All.SendAsync("TodoUpdated", new { eventType, todo });
 }
-
