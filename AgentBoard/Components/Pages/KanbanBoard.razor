@@ -1,0 +1,96 @@
+@using AgentBoard.Data.Models
+@inject NavigationManager Nav
+
+<div class="kanban-board">
+    @foreach (var status in Enum.GetValues<TodoStatus>())
+    {
+        var colTodos = Todos.Where(t => t.Status == status).ToList();
+        var isInProgress = status == TodoStatus.InProgress;
+
+        <div class="kanban-column @(isInProgress ? "kanban-column-inprogress" : "")">
+
+            @* Column header *@
+            <div class="kanban-column-header @(isInProgress ? "kanban-header-glow" : "")">
+                <MudText Typo="Typo.subtitle2"
+                         Style="@(isInProgress
+                             ? "font-family:'Orbitron',sans-serif; color:#00E5FF; letter-spacing:0.05em;"
+                             : "font-family:'Orbitron',sans-serif; letter-spacing:0.05em;")">
+                    @GetStatusLabel(status)
+                </MudText>
+                <MudChip T="string"
+                         Size="Size.Small"
+                         Color="@(isInProgress ? Color.Primary : Color.Default)"
+                         Style="min-width:28px; height:22px; justify-content:center; font-size:0.72rem;">
+                    @colTodos.Count
+                </MudChip>
+            </div>
+
+            @* Cards *@
+            <div class="kanban-cards">
+                @foreach (var todo in colTodos)
+                {
+                    <MudCard Class="kanban-card"
+                             @onclick="@(() => Nav.NavigateTo($"/todo/{todo.Id}"))">
+                        <MudCardContent Class="pa-3">
+
+                            @* Title *@
+                            <MudText Typo="Typo.body2"
+                                     Style="font-weight:600; margin-bottom:6px; line-height:1.35; word-break:break-word;">
+                                @todo.Title
+                            </MudText>
+
+                            @* Priority + Assigned badges *@
+                            <MudStack Row="true" Spacing="1" Wrap="Wrap.Wrap" AlignItems="AlignItems.Center">
+                                <PriorityBadge Priority="@todo.Priority" />
+                                @if (!string.IsNullOrEmpty(todo.AssignedTo))
+                                {
+                                    <MudChip T="string"
+                                             Size="Size.Small"
+                                             Icon="@Icons.Material.Filled.Person"
+                                             Color="Color.Default"
+                                             Class="ma-0"
+                                             Style="height:20px; font-size:0.68rem;">
+                                        @todo.AssignedTo
+                                    </MudChip>
+                                }
+                            </MudStack>
+
+                            @* Claim indicator *@
+                            @if (!string.IsNullOrEmpty(todo.ClaimedBy))
+                            {
+                                <div style="margin-top:6px;">
+                                    <ClaimIndicator Todo="@todo" ShowRelease="false" />
+                                </div>
+                            }
+
+                        </MudCardContent>
+                    </MudCard>
+                }
+
+                @* Empty state *@
+                @if (!colTodos.Any())
+                {
+                    <div class="kanban-empty">
+                        <MudText Typo="Typo.caption" Style="opacity:0.25; letter-spacing:0.08em; text-transform:uppercase;">
+                            empty
+                        </MudText>
+                    </div>
+                }
+            </div>
+
+        </div>
+    }
+</div>
+
+@code {
+    [Parameter, EditorRequired] public List<Todo> Todos { get; set; } = [];
+
+    private static string GetStatusLabel(TodoStatus s) => s switch
+    {
+        TodoStatus.Pending    => "⏳ Pending",
+        TodoStatus.InProgress => "⚡ In Progress",
+        TodoStatus.Done       => "✅ Done",
+        TodoStatus.Blocked    => "🚫 Blocked",
+        _                     => s.ToString()
+    };
+}

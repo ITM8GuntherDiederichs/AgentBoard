@@ -1,0 +1,92 @@
+/* ============================================================
+   KanbanBoard.razor.css  —  Cyberpunk dark Kanban styles
+   ============================================================ */
+
+/* ---- Board container ---- */
+.kanban-board {
+    display: flex;
+    gap: 16px;
+    overflow-x: auto;
+    padding-bottom: 16px;
+    align-items: flex-start;
+    /* Smooth horizontal scroll on touch devices */
+    -webkit-overflow-scrolling: touch;
+}
+
+/* ---- Column ---- */
+.kanban-column {
+    flex: 1 1 240px;
+    min-width: 220px;
+    max-width: 320px;
+    background: #111827;
+    border-radius: 8px;
+    border: 1px solid #1E2D45;
+    display: flex;
+    flex-direction: column;
+}
+
+/* InProgress column gets a neon cyan border accent */
+.kanban-column-inprogress {
+    border-color: rgba(0, 229, 255, 0.40);
+    box-shadow: 0 0 10px rgba(0, 229, 255, 0.06);
+}
+
+/* ---- Column header ---- */
+.kanban-column-header {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    padding: 10px 14px;
+    border-bottom: 1px solid #1E2D45;
+    border-radius: 8px 8px 0 0;
+}
+
+/* InProgress header glow */
+.kanban-header-glow {
+    border-bottom-color: rgba(0, 229, 255, 0.30);
+    background: rgba(0, 229, 255, 0.03);
+}
+
+.kanban-header-glow .mud-typography {
+    text-shadow: 0 0 14px rgba(0, 229, 255, 0.55);
+}
+
+/* ---- Cards area ---- */
+.kanban-cards {
+    padding: 8px;
+    display: flex;
+    flex-direction: column;
+    gap: 8px;
+    flex: 1;
+    min-height: 80px;
+}
+
+/* ---- Individual card ---- */
+.kanban-card {
+    background: #0D1220 !important;
+    border: 1px solid #1E2D45 !important;
+    border-radius: 6px !important;
+    transition: border-color 0.15s ease, box-shadow 0.15s ease, transform 0.1s ease;
+    cursor: pointer;
+}
+
+.kanban-card:hover {
+    border-color: rgba(0, 229, 255, 0.50) !important;
+    box-shadow: 0 0 10px rgba(0, 229, 255, 0.12) !important;
+    transform: translateY(-1px);
+}
+
+.kanban-card:active {
+    transform: translateY(0);
+}
+
+/* ---- Empty column placeholder ---- */
+.kanban-empty {
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    padding: 28px 8px;
+    border: 1px dashed #1E2D45;
+    border-radius: 6px;
+    margin: 2px;
+}
