@@ -56,5 +56,8 @@ public static class TodoEndpoints
             var todo = await svc.ReleaseClaimAsync(id);
             return todo is null ? Results.NotFound() : Results.Ok(todo);
         });
+
+        group.MapGet("/{id:guid}/events", async (Guid id, TodoService svc) =>
+            Results.Ok(await svc.GetEventsAsync(id)));
     }
 }

@@ -6,6 +6,7 @@ namespace AgentBoard.Data;
 public class ApplicationDbContext(DbContextOptions<ApplicationDbContext> options) : DbContext(options)
 {
     public DbSet<Todo> Todos => Set<Todo>();
+    public DbSet<TodoEvent> TodoEvents => Set<TodoEvent>();
 
     protected override void OnModelCreating(ModelBuilder modelBuilder)
     {
@@ -14,6 +15,15 @@ public class ApplicationDbContext(DbContextOptions<ApplicationDbContext> options
             e.HasIndex(t => new { t.Status, t.Priority });
             e.HasIndex(t => t.ClaimedBy);
             e.HasIndex(t => t.AssignedTo);
+        });
+
+        modelBuilder.Entity<TodoEvent>(e =>
+        {
+            e.HasIndex(te => te.TodoId);
+            e.HasIndex(te => te.OccurredAt);
+            e.Property(te => te.TodoTitle).HasMaxLength(200);
+            e.Property(te => te.EventType).HasMaxLength(50);
+            e.Property(te => te.Actor).HasMaxLength(100);
         });
     }
 
