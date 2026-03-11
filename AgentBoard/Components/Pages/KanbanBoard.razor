@@ -112,14 +112,10 @@
     private Todo?        _draggingTodo;
     private TodoStatus?  _dragTargetStatus;
 
-    /// <summary>Per-column drag-enter counter to avoid false dragleave from child elements.</summary>
-    private readonly Dictionary<TodoStatus, int> _dragEnterCounts = new();
-
     private void OnDragStart(Todo todo)
     {
         _draggingTodo    = todo;
         _dragTargetStatus = null;
-        foreach (var s in Enum.GetValues<TodoStatus>()) _dragEnterCounts[s] = 0;
     }
 
     private void OnDragEnd()
