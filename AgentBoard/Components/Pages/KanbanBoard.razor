@@ -1,13 +1,23 @@
 @using AgentBoard.Data.Models
+@using AgentBoard.Contracts
+@using AgentBoard.Services
 @inject NavigationManager Nav
+@inject TodoService TodoService
+@inject ISnackbar Snackbar
 
 <div class="kanban-board">
     @foreach (var status in Enum.GetValues<TodoStatus>())
     {
-        var colTodos = Todos.Where(t => t.Status == status).ToList();
-        var isInProgress = status == TodoStatus.InProgress;
+        var colStatus = status; // capture for closures
+        var colTodos  = Todos.Where(t => t.Status == colStatus).ToList();
+        var isInProgress  = colStatus == TodoStatus.InProgress;
+        var isDragTarget  = _dragTargetStatus == colStatus && _draggingTodo is not null;
 
-        <div class="kanban-column @(isInProgress ? "kanban-column-inprogress" : "")">
+        <div class="kanban-column @(isInProgress ? "kanban-column-inprogress" : "") @(isDragTarget ? "kanban-column-drag-over" : "")"
+             @ondragover:preventDefault="true"
+             @ondragover="@(() => OnColumnDragOver(colStatus))"
+             @ondrop="@(() => OnDrop(colStatus))"
+             @ondragleave="@(() => OnColumnDragLeave(colStatus))">
 
             @* Column header *@
             <div class="kanban-column-header @(isInProgress ? "kanban-header-glow" : "")">
@@ -15,7 +25,7 @@
                          Style="@(isInProgress
                              ? "font-family:'Orbitron',sans-serif; color:#00E5FF; letter-spacing:0.05em;"
                              : "font-family:'Orbitron',sans-serif; letter-spacing:0.05em;")">
-                    @GetStatusLabel(status)
+                    @GetStatusLabel(colStatus)
                 </MudText>
                 <MudChip T="string"
                          Size="Size.Small"
@@ -29,8 +39,14 @@
             <div class="kanban-cards">
                 @foreach (var todo in colTodos)
                 {
-                    <MudCard Class="kanban-card"
-                             @onclick="@(() => Nav.NavigateTo($"/todo/{todo.Id}"))">
+                    var isDraggingThis = _draggingTodo?.Id == todo.Id;
+                    var capturedTodo   = todo; // capture for closures
+
+                    <MudCard Class="@($"kanban-card{(isDraggingThis ? " kanban-card-dragging" : "")}")"
+                             draggable="true"
+                             @ondragstart="@(() => OnDragStart(capturedTodo))"
+                             @ondragend="OnDragEnd"
+                             @onclick="@(() => Nav.NavigateTo($"/todo/{capturedTodo.Id}"))">
                         <MudCardContent Class="pa-3">
 
                             @* Title *@
@@ -67,10 +83,10 @@
                     </MudCard>
                 }
 
-                @* Empty state *@
+                @* Empty state / drop target when column is empty *@
                 @if (!colTodos.Any())
                 {
-                    <div class="kanban-empty">
+                    <div class="kanban-empty @(isDragTarget ? "kanban-empty-drag-target" : "")">
                         <MudText Typo="Typo.caption" Style="opacity:0.25; letter-spacing:0.08em; text-transform:uppercase;">
                             empty
                         </MudText>
@@ -83,7 +99,92 @@
 </div>
 
 @code {
-    [Parameter, EditorRequired] public List<Todo> Todos { get; set; } = [];
+    [Parameter, EditorRequired] public List<Todo> Todos        { get; set; } = [];
+
+    /// <summary>
+    /// Invoked after a successful status change via drag-and-drop so the parent
+    /// can reload Kanban data immediately (in addition to the SignalR refresh).
+    /// </summary>
+    [Parameter] public EventCallback OnStatusChanged { get; set; }
+
+    // ── Drag state ────────────────────────────────────────────────────────────
+
+    private Todo?        _draggingTodo;
+    private TodoStatus?  _dragTargetStatus;
+
+    /// <summary>Per-column drag-enter counter to avoid false dragleave from child elements.</summary>
+    private readonly Dictionary<TodoStatus, int> _dragEnterCounts = new();
+
+    private void OnDragStart(Todo todo)
+    {
+        _draggingTodo    = todo;
+        _dragTargetStatus = null;
+        foreach (var s in Enum.GetValues<TodoStatus>()) _dragEnterCounts[s] = 0;
+    }
+
+    private void OnDragEnd()
+    {
+        _draggingTodo    = null;
+        _dragTargetStatus = null;
+    }
+
+    private void OnColumnDragOver(TodoStatus status)
+    {
+        // Track the current target column only when it changes (avoids excessive re-renders).
+        if (_dragTargetStatus != status)
+        {
+            _dragTargetStatus = status;
+            StateHasChanged();
+        }
+    }
+
+    private void OnColumnDragLeave(TodoStatus status)
+    {
+        // Only clear highlight if we are still tracking this column as target.
+        // This suppresses the flicker that occurs when the pointer briefly leaves
+        // the column div to enter a child element and immediately re-enters.
+        // Using a short check: only clear when the target is the current column.
+        if (_dragTargetStatus == status)
+        {
+            _dragTargetStatus = null;
+            StateHasChanged();
+        }
+    }
+
+    private async Task OnDrop(TodoStatus targetStatus)
+    {
+        if (_draggingTodo is null) return;
+        if (_draggingTodo.Status == targetStatus)
+        {
+            _dragTargetStatus = null;
+            return;
+        }
+
+        var todo           = _draggingTodo;
+        var originalStatus = todo.Status;
+
+        // Optimistic update — move the card immediately in the UI.
+        todo.Status       = targetStatus;
+        _draggingTodo     = null;
+        _dragTargetStatus = null;
+
+        try
+        {
+            await TodoService.PatchAsync(todo.Id, new PatchTodoRequest { Status = targetStatus });
+
+            // Notify parent so it can reload; SignalR will also fire a reload for all clients.
+            await OnStatusChanged.InvokeAsync();
+        }
+        catch (Exception ex)
+        {
+            // Revert optimistic update on failure.
+            todo.Status = originalStatus;
+            Snackbar.Add($"Failed to move card: {ex.Message}", Severity.Error);
+            StateHasChanged();
+        }
+    }
+
+    // ── Helpers ───────────────────────────────────────────────────────────────
 
     private static string GetStatusLabel(TodoStatus s) => s switch
     {

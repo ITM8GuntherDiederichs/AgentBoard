@@ -66,7 +66,7 @@
     @* Kanban view *@
     @if (_isKanban)
     {
-        <KanbanBoard Todos="_kanbanTodos" />
+        <KanbanBoard Todos="_kanbanTodos" OnStatusChanged="LoadKanbanData" />
         <MudText Typo="Typo.caption" Style="opacity:0.5">
             Real-time updates via SignalR · @_kanbanTodos.Count todo(s)
         </MudText>
