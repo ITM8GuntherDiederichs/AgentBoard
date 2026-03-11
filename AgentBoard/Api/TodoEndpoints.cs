@@ -10,8 +10,16 @@ public static class TodoEndpoints
     {
         var group = app.MapGroup("/api/todos").WithTags("todos");
 
-        group.MapGet("/", async (TodoService svc, TodoStatus? status, TodoPriority? priority, string? assignedTo, string? claimedBy, DateTime? dueBefore)
-            => Results.Ok(await svc.GetAllAsync(status, priority, assignedTo, claimedBy, dueBefore)));
+        group.MapGet("/", async (
+                TodoService svc,
+                TodoStatus? status,
+                TodoPriority? priority,
+                string? assignedTo,
+                string? claimedBy,
+                DateTime? dueBefore,
+                int page = 1,
+                int pageSize = 25)
+            => Results.Ok(await svc.GetAllAsync(status, priority, assignedTo, claimedBy, dueBefore, page, pageSize)));
 
         group.MapGet("/{id:guid}", async (Guid id, TodoService svc) =>
         {

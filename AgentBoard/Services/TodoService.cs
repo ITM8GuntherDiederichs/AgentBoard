@@ -9,8 +9,17 @@ namespace AgentBoard.Services;
 
 public class TodoService(IDbContextFactory<ApplicationDbContext> factory, IHubContext<AgentBoardHub> hub)
 {
-    public async Task<List<Todo>> GetAllAsync(TodoStatus? status, TodoPriority? priority, string? assignedTo, string? claimedBy, DateTime? dueBefore = null)
+    /// <summary>Returns a paginated list of todos matching the specified filters.</summary>
+    public async Task<PagedResult<Todo>> GetAllAsync(
+        TodoStatus? status,
+        TodoPriority? priority,
+        string? assignedTo,
+        string? claimedBy,
+        DateTime? dueBefore = null,
+        int page = 1,
+        int pageSize = 25)
     {
+        pageSize = Math.Min(pageSize, 100);
         using var db = await factory.CreateDbContextAsync();
         var q = db.Todos.AsQueryable();
         if (status.HasValue) q = q.Where(t => t.Status == status.Value);
@@ -18,7 +27,16 @@ public class TodoService(IDbContextFactory<ApplicationDbContext> factory, IHubCo
         if (!string.IsNullOrEmpty(assignedTo)) q = q.Where(t => t.AssignedTo == assignedTo);
         if (!string.IsNullOrEmpty(claimedBy)) q = q.Where(t => t.ClaimedBy == claimedBy);
         if (dueBefore.HasValue) q = q.Where(t => t.DueAt.HasValue && t.DueAt.Value <= dueBefore.Value);
-        return await q.OrderByDescending(t => t.Priority).ThenBy(t => t.CreatedAt).ToListAsync();
+
+        var totalCount = await q.CountAsync();
+        var items = await q
+            .OrderByDescending(t => t.Priority)
+            .ThenBy(t => t.CreatedAt)
+            .Skip((page - 1) * pageSize)
+            .Take(pageSize)
+            .ToListAsync();
+
+        return PagedResult<Todo>.Create(items, totalCount, page, pageSize);
     }
 
     public async Task<Todo?> GetByIdAsync(Guid id)
