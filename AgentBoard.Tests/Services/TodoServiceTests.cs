@@ -405,7 +405,7 @@ public class TodoServiceTests
 
         var events = await svc.GetEventsAsync(created.Id);
 
-        Assert.Contains(events, e => e.EventType == "Updated");
+        Assert.Contains(events, e => e.EventType == "Patched");
     }
 
     [Fact]
@@ -474,15 +474,16 @@ public class TodoServiceTests
     {
         var svc = BuildService();
         var created = await svc.CreateAsync(MakeCreateRequest());
+        // Generate 5 additional "Updated" events via the public UpdateAsync mutation
         for (var i = 0; i < 5; i++)
-            await svc.LogEventAsync(new AgentBoard.Data.Models.TodoEvent
+            await svc.UpdateAsync(created.Id, new UpdateTodoRequest
             {
-                TodoId = created.Id,
-                TodoTitle = created.Title,
-                EventType = "Updated"
+                Title = created.Title,
+                Status = TodoStatus.InProgress,
+                Priority = TodoPriority.Medium
             });
 
-        var events = await svc.GetEventsAsync(created.Id, maxResults: 3);
+        var events = await svc.GetEventsAsync(created.Id, max: 3);
 
         Assert.Equal(3, events.Count);
     }

@@ -121,7 +121,7 @@
             if (result is not null)
             {
                 _todo = result;
-                _events = await TodoService.GetEventsAsync(Id, maxResults: 20);
+                _events = await TodoService.GetEventsAsync(Id, max: 20);
             }
             else
             {
@@ -157,7 +157,7 @@
         await TodoService.ReleaseClaimAsync(_todo.Id);
         var updated = await TodoService.GetByIdAsync(_todo.Id);
         if (updated is not null) _todo = updated;
-        _events = await TodoService.GetEventsAsync(Id, maxResults: 20);
+        _events = await TodoService.GetEventsAsync(Id, max: 20);
         Snackbar.Add("Claim released", Severity.Info);
     }
 
