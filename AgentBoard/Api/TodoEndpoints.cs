@@ -17,9 +17,10 @@ public static class TodoEndpoints
                 string? assignedTo,
                 string? claimedBy,
                 DateTime? dueBefore,
+                Guid? projectId,
                 int page = 1,
                 int pageSize = 25)
-            => Results.Ok(await svc.GetAllAsync(status, priority, assignedTo, claimedBy, dueBefore, page, pageSize)));
+            => Results.Ok(await svc.GetAllAsync(status, priority, assignedTo, claimedBy, dueBefore, page, pageSize, projectId)));
 
         group.MapGet("/{id:guid}", async (Guid id, TodoService svc) =>
         {

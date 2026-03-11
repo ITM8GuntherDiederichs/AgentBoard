@@ -24,6 +24,7 @@ public class Todo
     public DateTime? ClaimedAt { get; set; }
     public DateTime? ClaimExpiresAt { get; set; }
     public DateTime? DueAt { get; set; }
+    public Guid? ProjectId { get; set; }
     public DateTime CreatedAt { get; set; } = DateTime.UtcNow;
     public DateTime UpdatedAt { get; set; } = DateTime.UtcNow;
 

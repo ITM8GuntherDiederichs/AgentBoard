@@ -17,7 +17,8 @@ public class TodoService(IDbContextFactory<ApplicationDbContext> factory, IHubCo
         string? claimedBy,
         DateTime? dueBefore = null,
         int page = 1,
-        int pageSize = 25)
+        int pageSize = 25,
+        Guid? projectId = null)
     {
         pageSize = Math.Min(pageSize, 100);
         using var db = await factory.CreateDbContextAsync();
@@ -27,6 +28,7 @@ public class TodoService(IDbContextFactory<ApplicationDbContext> factory, IHubCo
         if (!string.IsNullOrEmpty(assignedTo)) q = q.Where(t => t.AssignedTo == assignedTo);
         if (!string.IsNullOrEmpty(claimedBy)) q = q.Where(t => t.ClaimedBy == claimedBy);
         if (dueBefore.HasValue) q = q.Where(t => t.DueAt.HasValue && t.DueAt.Value <= dueBefore.Value);
+        if (projectId.HasValue) q = q.Where(t => t.ProjectId == projectId.Value);
 
         var totalCount = await q.CountAsync();
         var items = await q

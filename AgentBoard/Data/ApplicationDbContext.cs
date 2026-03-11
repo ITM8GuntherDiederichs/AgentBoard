@@ -7,6 +7,7 @@ public class ApplicationDbContext(DbContextOptions<ApplicationDbContext> options
 {
     public DbSet<Todo> Todos => Set<Todo>();
     public DbSet<TodoEvent> TodoEvents => Set<TodoEvent>();
+    public DbSet<Project> Projects => Set<Project>();
 
     protected override void OnModelCreating(ModelBuilder modelBuilder)
     {
@@ -15,6 +16,12 @@ public class ApplicationDbContext(DbContextOptions<ApplicationDbContext> options
             e.HasIndex(t => new { t.Status, t.Priority });
             e.HasIndex(t => t.ClaimedBy);
             e.HasIndex(t => t.AssignedTo);
+            e.HasIndex(t => t.ProjectId);
+        });
+
+        modelBuilder.Entity<Project>(e =>
+        {
+            e.Property(p => p.Name).IsRequired().HasMaxLength(200);
         });
 
         modelBuilder.Entity<TodoEvent>(e =>

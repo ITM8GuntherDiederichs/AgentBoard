@@ -18,6 +18,7 @@ builder.Services.AddDbContextFactory<ApplicationDbContext>(options =>
     options.UseSqlServer(builder.Configuration.GetConnectionString("DefaultConnection")));
 
 builder.Services.AddScoped<TodoService>();
+builder.Services.AddScoped<ProjectService>();
 builder.Services.AddHostedService<ClaimExpiryService>();
 
 builder.Services.AddMudServices();
@@ -55,6 +56,7 @@ app.UseStaticFiles();
 app.UseAntiforgery();
 
 app.MapTodoEndpoints();
+app.MapProjectEndpoints();
 
 app.MapHub<AgentBoardHub>("/hubs/agentboard");
 
