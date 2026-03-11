@@ -89,4 +89,33 @@
     border: 1px dashed #1E2D45;
     border-radius: 6px;
     margin: 2px;
+    transition: border-color 0.15s ease, background 0.15s ease;
+}
+
+/* ---- Drag-and-drop ---- */
+
+/* Card being dragged gets reduced opacity */
+.kanban-card-dragging {
+    opacity: 0.4 !important;
+    cursor: grabbing !important;
+}
+
+/* All cards get a grab cursor while draggable */
+.kanban-card[draggable="true"] {
+    cursor: grab;
+}
+
+/* Column that is the current drop target: neon cyan highlight */
+.kanban-column-drag-over {
+    border-color: rgba(0, 229, 255, 0.80) !important;
+    box-shadow: 0 0 18px rgba(0, 229, 255, 0.22) !important;
+    background: rgba(0, 229, 255, 0.04) !important;
+    transition: border-color 0.1s ease, box-shadow 0.1s ease, background 0.1s ease;
+}
+
+/* Empty column drop target gets an extra visual cue */
+.kanban-empty-drag-target {
+    border-color: rgba(0, 229, 255, 0.55);
+    border-style: dashed;
+    background: rgba(0, 229, 255, 0.05);
 }
