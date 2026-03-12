@@ -75,6 +75,9 @@ public class TeamService(IDbContextFactory<ApplicationDbContext> factory)
         if (patch.Description is not null) team.Description = patch.Description;
         if (patch.ClearInstructions) team.Instructions = null;
         else if (patch.Instructions is not null) team.Instructions = patch.Instructions;
+        if (patch.IntegrationType is not null) team.IntegrationType = patch.IntegrationType.Value;
+        if (patch.ClearRepoUrl) team.RepoUrl = null;
+        else if (patch.RepoUrl is not null) team.RepoUrl = patch.RepoUrl;
         team.UpdatedAt = DateTime.UtcNow;
 
         await db.SaveChangesAsync();

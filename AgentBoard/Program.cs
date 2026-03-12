@@ -26,6 +26,7 @@ builder.Services.AddScoped<TeamService>();
 builder.Services.AddScoped<ProjectAssignmentService>();
 builder.Services.AddScoped<SkillService>();
 builder.Services.AddScoped<SkillFileService>();
+builder.Services.AddScoped<DeployService>();
 builder.Services.AddHostedService<ClaimExpiryService>();
 
 builder.Services.AddMudServices();

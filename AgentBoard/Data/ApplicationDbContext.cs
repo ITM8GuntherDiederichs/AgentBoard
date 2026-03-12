@@ -32,6 +32,7 @@ public class ApplicationDbContext(DbContextOptions<ApplicationDbContext> options
         modelBuilder.Entity<Project>(e =>
         {
             e.Property(p => p.Name).IsRequired().HasMaxLength(200);
+            e.Property(p => p.ExternalProjectId).HasMaxLength(500);
         });
 
         modelBuilder.Entity<FeatureRequest>(e =>

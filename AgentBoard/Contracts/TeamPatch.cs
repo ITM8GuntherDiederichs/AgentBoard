@@ -7,4 +7,7 @@ public record TeamPatch(
     string? Name,
     string? Description,
     string? Instructions = null,
-    bool ClearInstructions = false);
+    bool ClearInstructions = false,
+    IntegrationType? IntegrationType = null,
+    string? RepoUrl = null,
+    bool ClearRepoUrl = false);

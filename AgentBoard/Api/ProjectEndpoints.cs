@@ -1,5 +1,7 @@
+using AgentBoard.Contracts;
 using AgentBoard.Data.Models;
 using AgentBoard.Services;
+using Microsoft.Extensions.Configuration;
 
 namespace AgentBoard.Api;
 
@@ -42,5 +44,34 @@ public static class ProjectEndpoints
             var deleted = await svc.DeleteAsync(id);
             return deleted ? Results.NoContent() : Results.NotFound();
         });
+
+        // POST /api/projects/{id}/integration
+        group.MapPost("/{id:guid}/integration", async (Guid id, IntegrationRequest body, ProjectService svc) =>
+        {
+            var patch = new ProjectPatch(
+                IntegrationToken: body.IntegrationToken,
+                IntegrationRepoUrl: body.IntegrationRepoUrl,
+                ExternalProjectId: body.ExternalProjectId);
+            var updated = await svc.PatchAsync(id, patch);
+            return updated is null ? Results.NotFound() : Results.Ok(updated);
+        });
+
+        // GET /api/projects/{id}/deploy
+        group.MapGet("/{id:guid}/deploy", async (Guid id, DeployService deploySvc, IConfiguration config) =>
+        {
+            var boardBaseUrl = config["BoardBaseUrl"] ?? "localhost:5227";
+            var zipBytes = await deploySvc.GenerateDeployZipAsync(id, boardBaseUrl);
+            if (zipBytes is null) return Results.NotFound();
+
+            // We need the project name for the filename; re-use what's in the zip
+            // The zip already embeds project info — return a fixed filename pattern
+            return Results.File(zipBytes, "application/zip", $"project-{id}-deploy.zip");
+        });
     }
 }
+
+/// <summary>Request body for <c>POST /api/projects/{id}/integration</c>.</summary>
+public sealed record IntegrationRequest(
+    string? IntegrationToken,
+    string? IntegrationRepoUrl,
+    string? ExternalProjectId);
