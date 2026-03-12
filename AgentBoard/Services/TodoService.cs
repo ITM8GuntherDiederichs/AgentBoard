@@ -104,6 +104,8 @@ public class TodoService(IDbContextFactory<ApplicationDbContext> factory, IHubCo
         if (request.Status.HasValue) todo.Status = request.Status.Value;
         if (request.Priority.HasValue) todo.Priority = request.Priority.Value;
         if (request.DueAt.HasValue) todo.DueAt = request.DueAt.Value;
+        if (request.ProjectId.HasValue) todo.ProjectId = request.ProjectId.Value;
+        if (request.ClearProjectId) todo.ProjectId = null;
         await db.SaveChangesAsync();
         await LogEventAsync(db, todo.Id, todo.Title, "Patched",
             details: "Status=" + todo.Status + ", Priority=" + todo.Priority);
