@@ -1,4 +1,4 @@
-using AgentBoard.Data.Models;
+﻿using AgentBoard.Data.Models;
 using Microsoft.EntityFrameworkCore;
 
 namespace AgentBoard.Data;
@@ -12,6 +12,8 @@ public class ApplicationDbContext(DbContextOptions<ApplicationDbContext> options
     public DbSet<Agent> Agents => Set<Agent>();
     public DbSet<Team> Teams => Set<Team>();
     public DbSet<TeamMember> TeamMembers => Set<TeamMember>();
+    public DbSet<ProjectAgent> ProjectAgents => Set<ProjectAgent>();
+    public DbSet<ProjectTeam> ProjectTeams => Set<ProjectTeam>();
 
     protected override void OnModelCreating(ModelBuilder modelBuilder)
     {
@@ -58,11 +60,25 @@ public class ApplicationDbContext(DbContextOptions<ApplicationDbContext> options
         {
             e.HasKey(tm => new { tm.TeamId, tm.AgentId });
             e.HasIndex(tm => tm.AgentId);
-            // No FK constraint to Agents table — AgentId is a plain Guid reference
+            // No FK constraint to Agents table - AgentId is a plain Guid reference
             e.HasOne(tm => tm.Team)
                 .WithMany(t => t.Members)
                 .HasForeignKey(tm => tm.TeamId)
                 .OnDelete(DeleteBehavior.Cascade);
+        });
+
+        modelBuilder.Entity<ProjectAgent>(e =>
+        {
+            e.HasKey(pa => new { pa.ProjectId, pa.AgentId });
+            e.HasIndex(pa => pa.AgentId);
+            // No FK constraint to Agents table - loose coupling pattern
+        });
+
+        modelBuilder.Entity<ProjectTeam>(e =>
+        {
+            e.HasKey(pt => new { pt.ProjectId, pt.TeamId });
+            e.HasIndex(pt => pt.TeamId);
+            // No FK constraint to Teams table - loose coupling pattern
         });
     }
 

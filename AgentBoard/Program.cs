@@ -1,4 +1,4 @@
-using AgentBoard.Api;
+﻿using AgentBoard.Api;
 using AgentBoard.Components;
 using AgentBoard.Data;
 using AgentBoard.Hubs;
@@ -23,6 +23,7 @@ builder.Services.AddScoped<ProjectService>();
 builder.Services.AddScoped<FeatureRequestService>();
 builder.Services.AddScoped<AgentService>();
 builder.Services.AddScoped<TeamService>();
+builder.Services.AddScoped<ProjectAssignmentService>();
 builder.Services.AddHostedService<ClaimExpiryService>();
 
 builder.Services.AddMudServices();
@@ -54,7 +55,7 @@ if (!app.Environment.IsDevelopment())
     // The default HSTS value is 30 days. You may want to change this for production scenarios, see https://aka.ms/aspnetcore-hsts.
     app.UseHsts();
 }
-// Status code pages only for non-API routes — API endpoints return RFC-compliant status codes directly.
+// Status code pages only for non-API routes - API endpoints return RFC-compliant status codes directly.
 app.UseWhen(
     ctx => !ctx.Request.Path.StartsWithSegments("/api"),
     branch => branch.UseStatusCodePagesWithReExecute("/not-found", createScopeForStatusCodePages: true));
@@ -62,13 +63,14 @@ app.UseHttpsRedirection();
 
 // UseStaticFiles serves _content/{LibraryName}/ paths for Razor Class Library packages
 // (e.g. _content/MudBlazor/MudBlazor.min.css). MapStaticAssets() alone does not intercept
-// these paths in development — it only handles fingerprinted app-level assets.
+// these paths in development - it only handles fingerprinted app-level assets.
 app.UseStaticFiles();
 
 app.UseAntiforgery();
 
 app.MapTodoEndpoints();
 app.MapProjectEndpoints();
+app.MapProjectAssignmentEndpoints();
 app.MapFeatureRequestEndpoints();
 app.MapAgentEndpoints();
 app.MapTeamEndpoints();
