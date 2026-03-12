@@ -1,3 +1,5 @@
+using System.Text.Json.Serialization;
+
 namespace AgentBoard.Data.Models;
 
 /// <summary>
@@ -17,6 +19,7 @@ public class TeamMember
     /// <summary>UTC timestamp when this member was added to the team.</summary>
     public DateTime AddedAt { get; set; }
 
-    /// <summary>Navigation property to the parent team.</summary>
+    /// <summary>Navigation property to the parent team. Excluded from JSON serialization to avoid circular references.</summary>
+    [JsonIgnore]
     public Team Team { get; set; } = null!;
 }
