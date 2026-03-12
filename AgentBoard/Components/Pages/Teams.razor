@@ -433,12 +433,14 @@
     {
         var model = new Team
         {
-            Id           = team.Id,
-            Name         = team.Name,
-            Description  = team.Description,
-            Instructions = team.Instructions,
-            CreatedAt    = team.CreatedAt,
-            UpdatedAt    = team.UpdatedAt
+            Id              = team.Id,
+            Name            = team.Name,
+            Description     = team.Description,
+            Instructions    = team.Instructions,
+            IntegrationType = team.IntegrationType,
+            RepoUrl         = team.RepoUrl,
+            CreatedAt       = team.CreatedAt,
+            UpdatedAt       = team.UpdatedAt
         };
 
         var parameters = new DialogParameters<TeamDialog> { { x => x.Model, model } };
@@ -453,7 +455,10 @@
                     updated.Name,
                     updated.Description,
                     updated.Instructions,
-                    ClearInstructions: string.IsNullOrEmpty(updated.Instructions));
+                    ClearInstructions: string.IsNullOrEmpty(updated.Instructions),
+                    IntegrationType: updated.IntegrationType,
+                    RepoUrl: updated.IntegrationType != IntegrationType.None ? updated.RepoUrl : null,
+                    ClearRepoUrl: updated.IntegrationType == IntegrationType.None);
                 var response = await Http.PatchAsJsonAsync($"api/teams/{updated.Id}", patch);
                 response.EnsureSuccessStatusCode();
                 Snackbar.Add("Team updated", Severity.Success);

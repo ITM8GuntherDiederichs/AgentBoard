@@ -338,12 +338,34 @@ else if (_project is not null)
                         <MudText Typo="Typo.subtitle1" Style="font-family:'Orbitron',sans-serif; color:#B388FF; font-size:0.8rem;">
                             ◈ ASSIGNED TEAMS
                         </MudText>
-                        <MudButton Variant="Variant.Outlined"
-                                   Size="Size.Small"
-                                   StartIcon="@Icons.Material.Filled.GroupAdd"
-                                   Style="border-color:#B388FF; color:#B388FF;"
-                                   OnClick="@(() => { _showAddTeamForm = !_showAddTeamForm; _selectedTeamId = Guid.Empty; StateHasChanged(); })"
-                                   aria-label="Add team to project">Add Team</MudButton>
+                        <MudStack Row="true" Spacing="1" AlignItems="AlignItems.Center">
+                            @* Deploy Team button *@
+                            <MudTooltip Text="Download deploy package as ZIP">
+                                <MudButton Variant="Variant.Outlined"
+                                           Size="Size.Small"
+                                           StartIcon="@(_isDeploying ? null : Icons.Material.Filled.Download)"
+                                           Style="border-color:#00E5FF; color:#00E5FF;"
+                                           Disabled="@_isDeploying"
+                                           OnClick="ConfirmDeployAsync"
+                                           aria-label="Deploy team to ZIP package">
+                                    @if (_isDeploying)
+                                    {
+                                        <MudProgressCircular Size="Size.Small" Indeterminate="true" Style="color:#00E5FF; margin-right:4px;" />
+                                        <span>Deploying…</span>
+                                    }
+                                    else
+                                    {
+                                        <span>Deploy Team ⬇</span>
+                                    }
+                                </MudButton>
+                            </MudTooltip>
+                            <MudButton Variant="Variant.Outlined"
+                                       Size="Size.Small"
+                                       StartIcon="@Icons.Material.Filled.GroupAdd"
+                                       Style="border-color:#B388FF; color:#B388FF;"
+                                       OnClick="@(() => { _showAddTeamForm = !_showAddTeamForm; _selectedTeamId = Guid.Empty; StateHasChanged(); })"
+                                       aria-label="Add team to project">Add Team</MudButton>
+                        </MudStack>
                     </MudStack>
 
                     @* Add team form — always rendered, toggled with display:none to avoid MudSelect @if crash *@
@@ -554,6 +576,7 @@ else if (_project is not null)
     private bool _featuresLoading;
     private bool _teamsLoading;
     private bool _agentsLoading;
+    private bool _isDeploying;
     private bool _hubConnected;
     private string? _initError;
     private MudDataGrid<Todo>? _grid;
@@ -1074,6 +1097,54 @@ else if (_project is not null)
 
     private sealed record ProjectTeamEntryDto(Guid TeamId, DateTime AssignedAt);
     private sealed record ProjectAgentEntryDto(Guid AgentId, DateTime AssignedAt, string Source);
+
+    // ── Deploy ───────────────────────────────────────────────────────────────
+
+    private async Task ConfirmDeployAsync()
+    {
+        var parameters = new DialogParameters<ConfirmDialog>
+        {
+            { x => x.ContentText, "Deploy this project's team to a ZIP package? The file will be downloaded to your browser." },
+            { x => x.ButtonText, "Deploy" }
+        };
+        var dialog = await DialogService.ShowAsync<ConfirmDialog>("Deploy Team", parameters);
+        var result = await dialog.Result;
+        if (result is { Canceled: false })
+            await DeployTeamAsync();
+    }
+
+    private async Task DeployTeamAsync()
+    {
+        _isDeploying = true;
+        try
+        {
+            var response = await Http.GetAsync($"api/projects/{ProjectId}/deploy");
+            if (response.IsSuccessStatusCode)
+            {
+                var bytes    = await response.Content.ReadAsByteArrayAsync();
+                var base64   = Convert.ToBase64String(bytes);
+                var fileName = $"{(_project?.Name ?? ProjectId.ToString())}-deploy.zip";
+                await JS.InvokeVoidAsync("downloadFileFromBase64", base64, fileName, "application/zip");
+                Snackbar.Add("Deploy package downloaded!", Severity.Success);
+            }
+            else if (response.StatusCode == System.Net.HttpStatusCode.NotFound)
+            {
+                Snackbar.Add("No team assigned to this project yet.", Severity.Warning);
+            }
+            else
+            {
+                Snackbar.Add($"Deploy failed: {response.StatusCode}", Severity.Error);
+            }
+        }
+        catch (Exception ex)
+        {
+            Snackbar.Add($"Deploy failed: {ex.Message}", Severity.Error);
+        }
+        finally
+        {
+            _isDeploying = false;
+        }
+    }
 
     // ── Helpers ──────────────────────────────────────────────────────────────
     private static Color GetEventColor(string eventType) => eventType.ToLower() switch
