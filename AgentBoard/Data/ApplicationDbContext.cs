@@ -1,4 +1,4 @@
-﻿using AgentBoard.Data.Models;
+using AgentBoard.Data.Models;
 using Microsoft.EntityFrameworkCore;
 
 namespace AgentBoard.Data;
@@ -9,6 +9,7 @@ public class ApplicationDbContext(DbContextOptions<ApplicationDbContext> options
     public DbSet<TodoEvent> TodoEvents => Set<TodoEvent>();
     public DbSet<Project> Projects => Set<Project>();
     public DbSet<FeatureRequest> FeatureRequests => Set<FeatureRequest>();
+    public DbSet<Agent> Agents => Set<Agent>();
 
     protected override void OnModelCreating(ModelBuilder modelBuilder)
     {
@@ -29,6 +30,12 @@ public class ApplicationDbContext(DbContextOptions<ApplicationDbContext> options
         {
             e.Property(f => f.Title).IsRequired().HasMaxLength(300);
             e.HasIndex(f => f.ProjectId);
+        });
+
+        modelBuilder.Entity<Agent>(e =>
+        {
+            e.Property(a => a.Name).IsRequired().HasMaxLength(200);
+            e.HasIndex(a => a.IsAvailable);
         });
 
         modelBuilder.Entity<TodoEvent>(e =>
