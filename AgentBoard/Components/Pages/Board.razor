@@ -3,7 +3,9 @@
 @using AgentBoard.Data.Models
 @using AgentBoard.Services
 @using Microsoft.AspNetCore.SignalR.Client
+@using Microsoft.AspNetCore.WebUtilities
 @inject TodoService TodoService
+@inject ProjectService ProjectService
 @inject IDialogService DialogService
 @inject ISnackbar Snackbar
 @inject NavigationManager Nav
@@ -40,6 +42,15 @@
     @* Filter bar *@
     <MudPaper Class="pa-3" Elevation="1">
         <MudStack Row="true" Spacing="2" Wrap="Wrap.Wrap">
+            @* Project filter — always visible in both table and kanban *@
+            <MudSelect T="Guid?" @bind-Value="_filterProjectId" @bind-Value:after="OnProjectFilterChanged"
+                       Label="Project" Clearable="true" Style="min-width:200px"
+                       Placeholder="All Projects">
+                @foreach (var project in _projects)
+                {
+                    <MudSelectItem T="Guid?" Value="@((Guid?)project.Id)">@project.Name</MudSelectItem>
+                }
+            </MudSelect>
             @* Status filter hidden in Kanban mode (columns already show by status) — CSS only, no @if *@
             <div style="@(_isKanban ? "display:none" : "")">
                 <MudSelect T="TodoStatus?" @bind-Value="_filterStatus" @bind-Value:after="OnFilterChanged"
@@ -143,9 +154,12 @@
     private bool _isKanban;
     private List<Todo> _kanbanTodos = [];
 
-    private TodoStatus?  _filterStatus;
+    private TodoStatus?   _filterStatus;
     private TodoPriority? _filterPriority;
-    private string? _filterAssignedTo;
+    private string?       _filterAssignedTo;
+    private Guid?         _filterProjectId;
+
+    private List<Project> _projects = [];
 
     private HubConnection? _hub;
 
@@ -153,6 +167,18 @@
     {
         try
         {
+            // Read projectId from query string so it is available before first grid render
+            var uri   = new Uri(Nav.Uri);
+            var query = QueryHelpers.ParseQuery(uri.Query);
+            if (query.TryGetValue("projectId", out var projIdStr) &&
+                Guid.TryParse(projIdStr, out var pid))
+            {
+                _filterProjectId = pid;
+            }
+
+            // Load project list for the dropdown
+            _projects = await ProjectService.GetAllAsync();
+
             _hub = new HubConnectionBuilder()
                 .WithUrl(Nav.ToAbsoluteUri("/hubs/agentboard"))
                 .WithAutomaticReconnect()
@@ -233,7 +259,7 @@
 
     /// <summary>
     /// Loads all todos (no status filter) for the Kanban view.
-    /// Priority and AssignedTo filters still apply.
+    /// Priority, AssignedTo, and Project filters still apply.
     /// </summary>
     private async Task LoadKanbanData()
     {
@@ -243,7 +269,8 @@
             assignedTo: _filterAssignedTo,
             claimedBy: null,
             page: 1,
-            pageSize: 100);             // fetch up to 100 items for the kanban
+            pageSize: 100,              // fetch up to 100 items for the kanban
+            projectId: _filterProjectId);
         _kanbanTodos = result.Items;
     }
 
@@ -257,13 +284,39 @@
 
         _lastResult = await TodoService.GetAllAsync(
             _filterStatus, _filterPriority, _filterAssignedTo, null,
-            page: page, pageSize: pageSize);
+            page: page, pageSize: pageSize, projectId: _filterProjectId);
 
         return new GridData<Todo>
         {
             Items      = _lastResult.Items,
             TotalItems = _lastResult.TotalCount
         };
+    }
+
+    /// <summary>
+    /// Called when the Project filter changes.
+    /// Updates the browser URL query string then reloads the board data.
+    /// </summary>
+    private async Task OnProjectFilterChanged()
+    {
+        await UpdateQueryString();
+        await OnFilterChanged();
+    }
+
+    /// <summary>
+    /// Replaces the browser URL's query string to reflect the current projectId filter.
+    /// Uses history.replaceState so no Blazor navigation or circuit round-trip occurs.
+    /// </summary>
+    private async Task UpdateQueryString()
+    {
+        try
+        {
+            var url = _filterProjectId.HasValue
+                ? $"/?projectId={_filterProjectId.Value}"
+                : "/";
+            await JS.InvokeVoidAsync("history.replaceState", null, "", url);
+        }
+        catch { /* JS unavailable during prerender — ignore */ }
     }
 
     /// <summary>
@@ -287,6 +340,8 @@
         _filterStatus     = null;
         _filterPriority   = null;
         _filterAssignedTo = null;
+        _filterProjectId  = null;
+        await UpdateQueryString();
         await OnFilterChanged();
     }
 
