@@ -287,36 +287,6 @@ public class TodoServiceTests
         Assert.Null(result);
     }
 
-    [Fact]
-    public async Task PatchAsync_SetsClaimedBy_WhenClaimedByProvided()
-    {
-        var svc = BuildService();
-        var created = await svc.CreateAsync(MakeCreateRequest());
-
-        var patched = await svc.PatchAsync(created.Id, new PatchTodoRequest { ClaimedBy = "GPT-4o" });
-
-        Assert.NotNull(patched);
-        Assert.Equal("GPT-4o", patched.ClaimedBy);
-        Assert.NotNull(patched.ClaimedAt);
-    }
-
-    [Fact]
-    public async Task PatchAsync_ClearsClaimedBy_WhenClearClaimedByIsTrue()
-    {
-        var svc = BuildService();
-        var created = await svc.CreateAsync(MakeCreateRequest());
-        // First assign a claim
-        await svc.PatchAsync(created.Id, new PatchTodoRequest { ClaimedBy = "GPT-4o" });
-
-        // Now clear it
-        var patched = await svc.PatchAsync(created.Id, new PatchTodoRequest { ClearClaimedBy = true });
-
-        Assert.NotNull(patched);
-        Assert.Null(patched.ClaimedBy);
-        Assert.Null(patched.ClaimedAt);
-        Assert.Null(patched.ClaimExpiresAt);
-    }
-
     // -------------------------------------------------------------------------
     // DeleteAsync
     // -------------------------------------------------------------------------

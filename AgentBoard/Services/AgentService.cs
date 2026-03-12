@@ -24,14 +24,6 @@ public class AgentService(IDbContextFactory<ApplicationDbContext> factory)
         return await q.OrderBy(a => a.Name).ToListAsync();
     }
 
-    /// <summary>
-    /// Returns agents relevant to a given project.
-    /// Since there is no dedicated project-agent join table, this currently returns all agents.
-    /// When a project-agent assignment model is added in a future sprint, this method can filter.
-    /// </summary>
-    public Task<List<Agent>> GetForProjectAsync(Guid projectId)
-        => GetAllAsync();
-
     /// <summary>Returns the agent with the specified <paramref name="id"/>, or <c>null</c> if not found.</summary>
     public async Task<Agent?> GetByIdAsync(Guid id)
     {

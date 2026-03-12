@@ -1,10 +1,9 @@
-﻿@page "/todo/{Id:guid}"
+@page "/todo/{Id:guid}"
 @using AgentBoard.Contracts
 @using AgentBoard.Data.Models
 @using AgentBoard.Services
 @inject TodoService TodoService
 @inject ProjectService ProjectService
-@inject AgentService Agents
 @inject NavigationManager Nav
 @inject ISnackbar Snackbar
 @rendermode InteractiveServer
@@ -58,61 +57,8 @@
                 </MudSelect>
 
                 <MudDivider />
-                <MudText Typo="Typo.subtitle2" Style="color:#94A3B8; letter-spacing:0.05em;">
-                    <MudIcon Icon="@Icons.Material.Filled.SmartToy" Size="Size.Small" Class="mr-1" Style="vertical-align:middle;" />
-                    Claimed By
-                </MudText>
-
-                @* Agent dropdown - always rendered (not inside @if) per MudSelect/popover rules *@
-                <MudSelect T="Agent?"
-                           Value="_selectedAgent"
-                           ValueChanged="OnAgentChanged"
-                           Label="Assigned Agent"
-                           ToStringFunc="@(a => a == null ? "— Unassigned —" : a.Name)"
-                           Variant="Variant.Outlined"
-                           Dense="true"
-                           Style="@(_agents.Count == 0 ? "display:none" : "")">
-                    <MudSelectItem T="Agent?" Value="@((Agent?)null)">
-                        <MudStack Row="true" AlignItems="AlignItems.Center" Spacing="1">
-                            <MudIcon Icon="@Icons.Material.Filled.PersonOff" Size="Size.Small" Style="opacity:0.5" />
-                            <MudText Typo="Typo.body2" Style="opacity:0.6; font-style:italic;">— Unassigned —</MudText>
-                        </MudStack>
-                    </MudSelectItem>
-                    @foreach (var agent in _agents)
-                    {
-                        var capturedAgent = agent;
-                        <MudSelectItem T="Agent?" Value="@((Agent?)capturedAgent)">
-                            <MudStack Row="true" AlignItems="AlignItems.Center" Spacing="1">
-                                <MudText Typo="Typo.body2">@capturedAgent.Name</MudText>
-                                <MudChip T="string" Size="Size.Small" Variant="Variant.Outlined"
-                                         Style="@AgentChipStyle(capturedAgent)" Class="ma-0">
-                                    @capturedAgent.Type.ToString()
-                                </MudChip>
-                                @if (!capturedAgent.IsAvailable)
-                                {
-                                    <MudIcon Icon="@Icons.Material.Filled.DoNotDisturb" Size="Size.Small"
-                                             Style="opacity:0.4; font-size:0.85rem;" title="Unavailable" />
-                                }
-                            </MudStack>
-                        </MudSelectItem>
-                    }
-                </MudSelect>
-
-                @if (_loaded && _agents.Count == 0)
-                {
-                    <MudText Typo="Typo.caption" Style="opacity:0.4; font-style:italic;">No agents registered.</MudText>
-                }
-
-                @* Show legacy claim info when ClaimedBy is set but no registered agent matches *@
-                @if (_loaded && _todo.ClaimedAt.HasValue && _selectedAgent is null && !string.IsNullOrEmpty(_todo.ClaimedBy))
-                {
-                    <MudStack Row="true" AlignItems="AlignItems.Center" Spacing="1">
-                        <MudIcon Icon="@Icons.Material.Filled.Lock" Size="Size.Small" Color="Color.Warning" />
-                        <MudText Typo="Typo.caption">@_todo.ClaimedBy</MudText>
-                        <MudIconButton Icon="@Icons.Material.Filled.LockOpen" Size="Size.Small"
-                                       OnClick="ReleaseClaim" aria-label="Release claim" />
-                    </MudStack>
-                }
+                <MudText Typo="Typo.subtitle2">Claim Status</MudText>
+                <ClaimIndicator Todo="_todo" OnRelease="ReleaseClaim" />
 
                 <MudDivider />
                 <MudStack Row="true" Justify="Justify.FlexEnd" Spacing="2">
@@ -177,8 +123,6 @@
     private bool _notFound;
     private List<TodoEvent> _events = [];
     private List<Project> _projects = [];
-    private List<Agent> _agents = [];
-    private Agent? _selectedAgent;
 
     protected override async Task OnInitializedAsync()
     {
@@ -196,17 +140,6 @@
             }
 
             _projects = await ProjectService.GetAllAsync();
-
-            // Load agents scoped to project (if set) or all agents
-            _agents = _todo.ProjectId.HasValue
-                ? await Agents.GetForProjectAsync(_todo.ProjectId.Value)
-                : await Agents.GetAllAsync();
-
-            // Pre-select the agent that matches the current ClaimedBy name
-            _selectedAgent = string.IsNullOrEmpty(_todo.ClaimedBy)
-                ? null
-                : _agents.FirstOrDefault(a => a.Name == _todo.ClaimedBy);
-
             _loaded = true;
         }
         catch (Exception ex)
@@ -219,7 +152,7 @@
 
     /// <summary>
     /// Called when the project picker value changes.
-    /// Immediately PATCHes the todo with the new projectId and reloads the agent list.
+    /// Immediately PATCHes the todo with the new projectId.
     /// </summary>
     private async Task OnProjectChanged(Guid? projectId)
     {
@@ -236,59 +169,11 @@
                 : "No Project";
             Snackbar.Add($"Project set to \"{projectName}\".", Severity.Success);
 
-            // Reload agents scoped to the new project
-            _agents = projectId.HasValue
-                ? await Agents.GetForProjectAsync(projectId.Value)
-                : await Agents.GetAllAsync();
-
-            // Re-validate selected agent against updated list
-            if (_selectedAgent is not null && !_agents.Any(a => a.Id == _selectedAgent.Id))
-                _selectedAgent = null;
-
             _events = await TodoService.GetEventsAsync(Id, max: 20);
         }
         catch (Exception ex)
         {
             Snackbar.Add($"Failed to update project: {ex.Message}", Severity.Error);
-        }
-    }
-
-    /// <summary>
-    /// Called when the user selects (or clears) an agent from the dropdown.
-    /// Immediately PATCHes the todo's ClaimedBy field.
-    /// </summary>
-    private async Task OnAgentChanged(Agent? agent)
-    {
-        _selectedAgent = agent;
-        try
-        {
-            PatchTodoRequest patch;
-            string message;
-
-            if (agent is null)
-            {
-                patch = new PatchTodoRequest { ClearClaimedBy = true };
-                _todo.ClaimedBy = null;
-                _todo.ClaimedAt = null;
-                _todo.ClaimExpiresAt = null;
-                message = "Claim released.";
-            }
-            else
-            {
-                patch = new PatchTodoRequest { ClaimedBy = agent.Name };
-                _todo.ClaimedBy = agent.Name;
-                _todo.ClaimedAt = DateTime.UtcNow;
-                _todo.ClaimExpiresAt = null;
-                message = $"Assigned to \"{agent.Name}\".";
-            }
-
-            await TodoService.PatchAsync(_todo.Id, patch);
-            Snackbar.Add(message, Severity.Success);
-            _events = await TodoService.GetEventsAsync(Id, max: 20);
-        }
-        catch (Exception ex)
-        {
-            Snackbar.Add($"Failed to update assignment: {ex.Message}", Severity.Error);
         }
     }
 
@@ -312,18 +197,9 @@
         await TodoService.ReleaseClaimAsync(_todo.Id);
         var updated = await TodoService.GetByIdAsync(_todo.Id);
         if (updated is not null) _todo = updated;
-        _selectedAgent = null;
         _events = await TodoService.GetEventsAsync(Id, max: 20);
         Snackbar.Add("Claim released", Severity.Info);
     }
-
-    /// <summary>Returns the cyberpunk-theme inline style for an agent type chip.</summary>
-    private static string AgentChipStyle(Agent agent) => agent.Type switch
-    {
-        AgentType.AI    => "border-color:#00E5FF; color:#00E5FF; height:18px; font-size:0.65rem;",
-        AgentType.Human => "border-color:#B388FF; color:#B388FF; height:18px; font-size:0.65rem;",
-        _               => "height:18px; font-size:0.65rem;"
-    };
 
     private static Color EventColor(string eventType) => eventType switch
     {

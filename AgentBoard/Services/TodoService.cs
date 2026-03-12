@@ -106,23 +106,9 @@ public class TodoService(IDbContextFactory<ApplicationDbContext> factory, IHubCo
         if (request.DueAt.HasValue) todo.DueAt = request.DueAt.Value;
         if (request.ProjectId.HasValue) todo.ProjectId = request.ProjectId.Value;
         if (request.ClearProjectId) todo.ProjectId = null;
-        if (request.ClaimedBy is not null)
-        {
-            todo.ClaimedBy = request.ClaimedBy;
-            todo.ClaimedAt = DateTime.UtcNow;
-            todo.ClaimExpiresAt = null;
-        }
-        if (request.ClearClaimedBy)
-        {
-            todo.ClaimedBy = null;
-            todo.ClaimedAt = null;
-            todo.ClaimExpiresAt = null;
-        }
         await db.SaveChangesAsync();
         await LogEventAsync(db, todo.Id, todo.Title, "Patched",
-            details: "Status=" + todo.Status + ", Priority=" + todo.Priority
-                     + (request.ClaimedBy is not null ? ", ClaimedBy=" + request.ClaimedBy : "")
-                     + (request.ClearClaimedBy ? ", ClaimedBy=cleared" : ""));
+            details: "Status=" + todo.Status + ", Priority=" + todo.Priority);
         await NotifyAsync("updated", todo);
         return todo;
     }
