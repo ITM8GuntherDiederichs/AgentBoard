@@ -33,6 +33,15 @@
                           HelperText="Optional: describe the agent's role or capabilities"
                           aria-label="Agent description" />
 
+            <MudTextField T="string"
+                          Label="AI Instructions"
+                          @bind-Value="Model.Instructions"
+                          Lines="6"
+                          MaxLength="8000"
+                          Variant="Variant.Outlined"
+                          HelperText="System prompt / behavioural guidelines for this agent"
+                          aria-label="Agent AI instructions" />
+
             <MudSwitch T="bool"
                        @bind-Value="Model.IsAvailable"
                        Color="Color.Success"
