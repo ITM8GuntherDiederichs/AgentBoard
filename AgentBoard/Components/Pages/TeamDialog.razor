@@ -28,6 +28,36 @@
                           Variant="Variant.Outlined"
                           HelperText="Shared guidelines for all agents in this team"
                           aria-label="Team instructions" />
+
+            @* ── Integration ──────────────────────────────────────────────── *@
+            <MudDivider />
+            <MudText Typo="Typo.caption"
+                     Style="color:#00E5FF; text-transform:uppercase; letter-spacing:0.08em; font-family:'Orbitron',sans-serif; font-size:0.7rem;">
+                ⚙ Integration
+            </MudText>
+
+            @* MudSelect is ALWAYS rendered (never inside @if) — MudBlazor v9 rule *@
+            <MudSelect T="IntegrationType"
+                       Label="Integration Type"
+                       @bind-Value="Model.IntegrationType"
+                       Variant="Variant.Outlined"
+                       aria-label="Integration type">
+                @foreach (var t in Enum.GetValues<IntegrationType>())
+                {
+                    <MudSelectItem T="IntegrationType" Value="@t">@t.ToString()</MudSelectItem>
+                }
+            </MudSelect>
+
+            @* RepoUrl — display:none when None to avoid MudSelect @if crash on sibling components *@
+            <div style="@(Model.IntegrationType == IntegrationType.None ? "display:none" : "")">
+                <MudTextField T="string"
+                              Label="Repository URL"
+                              @bind-Value="Model.RepoUrl"
+                              Variant="Variant.Outlined"
+                              HelperText="e.g. https://github.com/org/repo"
+                              Placeholder="https://github.com/org/repo"
+                              aria-label="Repository URL" />
+            </div>
         </MudStack>
     </DialogContent>
     <DialogActions>
