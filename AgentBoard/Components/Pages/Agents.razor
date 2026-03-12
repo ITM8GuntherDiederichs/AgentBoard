@@ -1,0 +1,254 @@
+@page "/agents"
+@rendermode @(new InteractiveServerRenderMode(prerender: false))
+@using AgentBoard.Contracts
+@using AgentBoard.Data.Models
+@inject HttpClient Http
+@inject IDialogService DialogService
+@inject ISnackbar Snackbar
+
+<PageTitle>Agents — AgentBoard</PageTitle>
+
+@if (_initError is not null)
+{
+    <MudAlert Severity="Severity.Error" Class="mb-4">Failed to load agents: @_initError</MudAlert>
+}
+
+<MudStack Spacing="3">
+    <MudStack Row="true" AlignItems="AlignItems.Center" Justify="Justify.SpaceBetween">
+        <MudText Typo="Typo.h4" Style="font-family:'Orbitron',sans-serif; color:#00E5FF; letter-spacing:0.05em; text-shadow: 0 0 15px rgba(0,229,255,0.4);">
+            ⬡ AGENTS
+        </MudText>
+        <MudButton Variant="Variant.Filled"
+                   Color="Color.Primary"
+                   StartIcon="@Icons.Material.Filled.Add"
+                   aria-label="Create new agent"
+                   OnClick="OpenCreateDialog">New Agent</MudButton>
+    </MudStack>
+
+    @if (_loading)
+    {
+        <div class="agents-grid">
+            @for (int i = 0; i < 6; i++)
+            {
+                <MudPaper Class="agent-card-skeleton" Elevation="0">
+                    <MudSkeleton Animation="Animation.Wave" Height="24px" Width="55%" />
+                    <MudSkeleton Animation="Animation.Wave" Height="20px" Width="30%" Class="mt-2" />
+                    <MudSkeleton Animation="Animation.Wave" Height="16px" Class="mt-3" />
+                    <MudSkeleton Animation="Animation.Wave" Height="16px" Width="75%" Class="mt-1" />
+                </MudPaper>
+            }
+        </div>
+    }
+    else if (_agents.Count == 0 && _initError is null)
+    {
+        <MudPaper Class="pa-8" Elevation="0"
+                  Style="background:#0D1220; border:1px solid #1E2D45; border-radius:8px; text-align:center;">
+            <MudIcon Icon="@Icons.Material.Filled.SmartToy"
+                     Style="font-size:4rem; color:#1E2D45; display:block; margin:0 auto 1rem;" />
+            <MudText Typo="Typo.h6" Style="color:#7B8EA8;">No agents yet</MudText>
+            <MudText Style="color:#4A5568; margin-top:0.5rem;">
+                Register your first AI or human agent to get started.
+            </MudText>
+            <MudButton Variant="Variant.Filled"
+                       Color="Color.Primary"
+                       Class="mt-4"
+                       StartIcon="@Icons.Material.Filled.Add"
+                       OnClick="OpenCreateDialog">New Agent</MudButton>
+        </MudPaper>
+    }
+    else
+    {
+        <div class="agents-grid" role="list" aria-label="Agent list">
+            @foreach (var agent in _agents)
+            {
+                <div class="agent-card" role="listitem">
+                    <div class="agent-card-header">
+                        <span class="agent-name">@agent.Name</span>
+                        <div class="agent-card-actions">
+                            <MudTooltip Text="Edit agent">
+                                <MudIconButton Icon="@Icons.Material.Filled.Edit"
+                                               Size="Size.Small"
+                                               Style="color:#00E5FF"
+                                               aria-label="@($"Edit {agent.Name}")"
+                                               OnClick="@(() => OpenEditDialog(agent))" />
+                            </MudTooltip>
+                            <MudTooltip Text="Delete agent">
+                                <MudIconButton Icon="@Icons.Material.Filled.Delete"
+                                               Size="Size.Small"
+                                               Color="Color.Error"
+                                               aria-label="@($"Delete {agent.Name}")"
+                                               OnClick="@(() => DeleteAgent(agent))" />
+                            </MudTooltip>
+                        </div>
+                    </div>
+
+                    <div class="agent-card-chips">
+                        @if (agent.Type == AgentType.AI)
+                        {
+                            <MudChip T="string" Size="Size.Small" Class="chip-ai" aria-label="Type: AI">AI</MudChip>
+                        }
+                        else
+                        {
+                            <MudChip T="string" Size="Size.Small" Class="chip-human" aria-label="Type: Human">Human</MudChip>
+                        }
+
+                        @if (agent.IsAvailable)
+                        {
+                            <span class="availability-badge available" role="status" aria-label="Status: Available">
+                                <span class="dot dot-available" aria-hidden="true"></span>
+                                Available
+                            </span>
+                        }
+                        else
+                        {
+                            <span class="availability-badge offline" role="status" aria-label="Status: Offline">
+                                <span class="dot dot-offline" aria-hidden="true"></span>
+                                Offline
+                            </span>
+                        }
+                    </div>
+
+                    @if (!string.IsNullOrWhiteSpace(agent.Description))
+                    {
+                        <p class="agent-description">@Truncate(agent.Description, 120)</p>
+                    }
+                    else
+                    {
+                        <p class="agent-description no-description">No description</p>
+                    }
+                </div>
+            }
+        </div>
+    }
+</MudStack>
+
+@code {
+    private List<Agent> _agents = [];
+    private bool _loading = true;
+    private string? _initError;
+
+    protected override async Task OnInitializedAsync()
+    {
+        try
+        {
+            await LoadAgentsAsync();
+        }
+        catch (Exception ex)
+        {
+            _initError = ex.Message;
+            _loading = false;
+        }
+    }
+
+    private async Task LoadAgentsAsync()
+    {
+        _loading = true;
+        try
+        {
+            var agents = await Http.GetFromJsonAsync<List<Agent>>("api/agents");
+            _agents = agents ?? [];
+        }
+        catch (Exception ex)
+        {
+            _initError = ex.Message;
+        }
+        finally
+        {
+            _loading = false;
+        }
+    }
+
+    private async Task OpenCreateDialog()
+    {
+        var model = new Agent { IsAvailable = true };
+        var parameters = new DialogParameters<AgentDialog> { { x => x.Model, model } };
+        var dialog = await DialogService.ShowAsync<AgentDialog>("New Agent", parameters);
+        var result = await dialog.Result;
+
+        if (result is { Canceled: false, Data: Agent created })
+        {
+            try
+            {
+                var response = await Http.PostAsJsonAsync("api/agents", created);
+                response.EnsureSuccessStatusCode();
+                Snackbar.Add("Agent created", Severity.Success);
+                await LoadAgentsAsync();
+            }
+            catch (Exception ex)
+            {
+                Snackbar.Add($"Error creating agent: {ex.Message}", Severity.Error);
+            }
+        }
+    }
+
+    private async Task OpenEditDialog(Agent agent)
+    {
+        var model = new Agent
+        {
+            Id          = agent.Id,
+            Name        = agent.Name,
+            Type        = agent.Type,
+            Description = agent.Description,
+            IsAvailable = agent.IsAvailable,
+            CreatedAt   = agent.CreatedAt,
+            UpdatedAt   = agent.UpdatedAt
+        };
+
+        var parameters = new DialogParameters<AgentDialog> { { x => x.Model, model } };
+        var dialog = await DialogService.ShowAsync<AgentDialog>("Edit Agent", parameters);
+        var result = await dialog.Result;
+
+        if (result is { Canceled: false, Data: Agent updated })
+        {
+            try
+            {
+                var patch = new AgentPatch(
+                    updated.Name,
+                    updated.Description,
+                    updated.Type,
+                    updated.IsAvailable);
+
+                var response = await Http.PatchAsJsonAsync($"api/agents/{updated.Id}", patch);
+                response.EnsureSuccessStatusCode();
+                Snackbar.Add("Agent updated", Severity.Success);
+                await LoadAgentsAsync();
+            }
+            catch (Exception ex)
+            {
+                Snackbar.Add($"Error updating agent: {ex.Message}", Severity.Error);
+            }
+        }
+    }
+
+    private async Task DeleteAgent(Agent agent)
+    {
+        var parameters = new DialogParameters<ConfirmDialog>
+        {
+            { x => x.ContentText, $"Delete \"{agent.Name}\"? This cannot be undone." },
+            { x => x.ButtonText,  "Delete" }
+        };
+        var dialog = await DialogService.ShowAsync<ConfirmDialog>("Confirm Delete", parameters);
+        var result = await dialog.Result;
+
+        if (result is { Canceled: false })
+        {
+            try
+            {
+                var response = await Http.DeleteAsync($"api/agents/{agent.Id}");
+                response.EnsureSuccessStatusCode();
+                Snackbar.Add("Agent deleted", Severity.Success);
+                await LoadAgentsAsync();
+            }
+            catch (Exception ex)
+            {
+                Snackbar.Add($"Error deleting agent: {ex.Message}", Severity.Error);
+            }
+        }
+    }
+
+    private static string Truncate(string? text, int maxLength)
+    {
+        if (string.IsNullOrEmpty(text)) return "";
+        return text.Length <= maxLength ? text : text[..maxLength] + "…";
+    }
+}
