@@ -17,4 +17,6 @@ public class CreateTodoRequest
     public string? AssignedTo { get; set; }
 
     public DateTime? DueAt { get; set; }
+
+    public Guid? ProjectId { get; set; }
 }

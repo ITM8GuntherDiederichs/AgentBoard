@@ -67,7 +67,8 @@ public class TodoService(IDbContextFactory<ApplicationDbContext> factory, IHubCo
             Description = request.Description,
             Priority = request.Priority,
             AssignedTo = request.AssignedTo,
-            DueAt = request.DueAt
+            DueAt = request.DueAt,
+            ProjectId = request.ProjectId
         };
         db.Todos.Add(todo);
         await db.SaveChangesAsync();
