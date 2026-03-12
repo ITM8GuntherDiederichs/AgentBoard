@@ -1,0 +1,370 @@
+@page "/teams"
+@rendermode @(new InteractiveServerRenderMode(prerender: false))
+@using AgentBoard.Data.Models
+@inject HttpClient Http
+@inject IDialogService DialogService
+@inject ISnackbar Snackbar
+
+<PageTitle>Teams — AgentBoard</PageTitle>
+
+@if (_initError is not null)
+{
+    <MudAlert Severity="Severity.Error" Class="mb-4">Failed to load teams: @_initError</MudAlert>
+}
+
+<MudStack Spacing="3">
+    <MudStack Row="true" AlignItems="AlignItems.Center" Justify="Justify.SpaceBetween">
+        <MudText Typo="Typo.h4" Style="font-family:'Orbitron',sans-serif; color:#00E5FF; letter-spacing:0.05em; text-shadow: 0 0 15px rgba(0,229,255,0.4);">
+            ⬡ TEAMS
+        </MudText>
+        <MudButton Variant="Variant.Filled"
+                   Color="Color.Primary"
+                   StartIcon="@Icons.Material.Filled.GroupAdd"
+                   aria-label="Create new team"
+                   OnClick="OpenCreateDialog">New Team</MudButton>
+    </MudStack>
+
+    @if (_loading)
+    {
+        <MudGrid>
+            @for (int i = 0; i < 6; i++)
+            {
+                <MudItem xs="12" sm="6" md="4">
+                    <MudPaper Style="background:#0D1220; border:1px solid #1E2D45; border-radius:8px; padding:1.25rem; height:180px;">
+                        <MudSkeleton Animation="Animation.Wave" Height="24px" Width="60%" />
+                        <MudSkeleton Animation="Animation.Wave" Height="16px" Class="mt-3" />
+                        <MudSkeleton Animation="Animation.Wave" Height="16px" Width="80%" Class="mt-1" />
+                    </MudPaper>
+                </MudItem>
+            }
+        </MudGrid>
+    }
+    else if (_teams.Count == 0 && _initError is null)
+    {
+        <MudPaper Class="pa-8" Elevation="0"
+                  Style="background:#0D1220; border:1px solid #1E2D45; border-radius:8px; text-align:center;">
+            <MudIcon Icon="@Icons.Material.Filled.Groups"
+                     Style="font-size:4rem; color:#1E2D45; display:block; margin:0 auto 1rem;" />
+            <MudText Typo="Typo.h6" Style="color:#7B8EA8;">No teams yet</MudText>
+            <MudText Style="color:#4A5568; margin-top:0.5rem;">
+                Create your first team to organise agents into groups.
+            </MudText>
+            <MudButton Variant="Variant.Filled"
+                       Color="Color.Primary"
+                       Class="mt-4"
+                       StartIcon="@Icons.Material.Filled.GroupAdd"
+                       OnClick="OpenCreateDialog">New Team</MudButton>
+        </MudPaper>
+    }
+    else
+    {
+        <div class="teams-grid">
+            @foreach (var team in _teams)
+            {
+                var isExpanded = _expandedTeamId == team.Id;
+                <div class="team-card @(isExpanded ? "team-card--expanded" : "")">
+                    <!-- Card Header -->
+                    <div class="team-card-header"
+                         role="button"
+                         tabindex="0"
+                         aria-expanded="@isExpanded.ToString().ToLower()"
+                         aria-label="@($"Toggle members for {team.Name}")"
+                         @onclick="@(() => ToggleExpand(team.Id))"
+                         @onkeydown="@((e) => { if (e.Key == "Enter" || e.Key == " ") ToggleExpand(team.Id); })">
+                        <div class="team-card-title-row">
+                            <span class="team-name">@team.Name</span>
+                            <div style="display:flex; align-items:center; gap:0.5rem;">
+                                <span class="member-badge" aria-label="@team.Members.Count member(s)">
+                                    <MudIcon Icon="@Icons.Material.Filled.Person" Size="Size.Small" Style="color:#00E5FF; vertical-align:middle;" />
+                                    @team.Members.Count
+                                </span>
+                                <MudIcon Icon="@(isExpanded ? Icons.Material.Filled.ExpandLess : Icons.Material.Filled.ExpandMore)"
+                                         Style="color:#7B8EA8;" Size="Size.Small" />
+                            </div>
+                        </div>
+                        <div class="team-card-actions" @onclick:stopPropagation="true">
+                            <MudTooltip Text="Edit team">
+                                <MudIconButton Icon="@Icons.Material.Filled.Edit"
+                                               Size="Size.Small"
+                                               Style="color:#00E5FF"
+                                               aria-label="@($"Edit {team.Name}")"
+                                               OnClick="@(() => OpenEditDialog(team))" />
+                            </MudTooltip>
+                            <MudTooltip Text="Delete team">
+                                <MudIconButton Icon="@Icons.Material.Filled.Delete"
+                                               Size="Size.Small"
+                                               Color="Color.Error"
+                                               aria-label="@($"Delete {team.Name}")"
+                                               OnClick="@(() => DeleteTeam(team))" />
+                            </MudTooltip>
+                        </div>
+                    </div>
+
+                    <!-- Description -->
+                    @if (!string.IsNullOrWhiteSpace(team.Description))
+                    {
+                        <p class="team-description">@Truncate(team.Description, 120)</p>
+                    }
+                    else
+                    {
+                        <p class="team-description no-description">No description</p>
+                    }
+
+                    <!-- Members Panel (inline expand) -->
+                    <div class="team-members-panel" style="display:@(isExpanded ? "block" : "none");">
+                        <div class="team-members-header">
+                            <MudText Typo="Typo.subtitle2" Style="color:#7B8EA8; text-transform:uppercase; letter-spacing:0.1em; font-size:0.75rem;">Members</MudText>
+                            <MudButton Variant="Variant.Text"
+                                       Size="Size.Small"
+                                       StartIcon="@Icons.Material.Filled.PersonAdd"
+                                       Color="Color.Primary"
+                                       aria-label="Add member to team"
+                                       OnClick="@(() => OpenAddMemberDialog(team))">Add Member</MudButton>
+                        </div>
+
+                        @if (team.Members.Count == 0)
+                        {
+                            <MudText Typo="Typo.caption" Style="color:#4A5568; font-style:italic;">No members yet. Add agents to this team.</MudText>
+                        }
+                        else
+                        {
+                            <div class="team-member-chips">
+                                @foreach (var member in team.Members)
+                                {
+                                    var agentName = GetAgentName(member.AgentId);
+                                    <div class="member-chip-row">
+                                        <MudChip T="string"
+                                                 Size="Size.Small"
+                                                 Color="Color.Primary"
+                                                 Variant="Variant.Outlined"
+                                                 Icon="@Icons.Material.Filled.SmartToy">@agentName</MudChip>
+                                        <MudTooltip Text="Remove member">
+                                            <MudIconButton Icon="@Icons.Material.Filled.Close"
+                                                           Size="Size.Small"
+                                                           Style="color:#EF5350;"
+                                                           aria-label="@($"Remove {agentName} from team")"
+                                                           OnClick="@(() => RemoveMember(team, member.AgentId))" />
+                                        </MudTooltip>
+                                    </div>
+                                }
+                            </div>
+                        }
+                    </div>
+                </div>
+            }
+        </div>
+    }
+</MudStack>
+
+@code {
+    private List<Team> _teams = [];
+    private List<Agent> _agents = [];
+    private bool _loading = true;
+    private string? _initError;
+    private Guid? _expandedTeamId;
+
+    protected override async Task OnInitializedAsync()
+    {
+        try
+        {
+            await Task.WhenAll(LoadTeamsAsync(), LoadAgentsAsync());
+        }
+        catch (Exception ex)
+        {
+            _initError = ex.Message;
+            _loading = false;
+        }
+    }
+
+    private async Task LoadTeamsAsync()
+    {
+        _loading = true;
+        try
+        {
+            var teams = await Http.GetFromJsonAsync<List<Team>>("api/teams");
+            _teams = teams ?? [];
+        }
+        catch (Exception ex)
+        {
+            _initError = ex.Message;
+        }
+        finally
+        {
+            _loading = false;
+        }
+    }
+
+    private async Task LoadAgentsAsync()
+    {
+        try
+        {
+            var agents = await Http.GetFromJsonAsync<List<Agent>>("api/agents");
+            _agents = agents ?? [];
+        }
+        catch
+        {
+            _agents = [];
+        }
+    }
+
+    private void ToggleExpand(Guid teamId)
+    {
+        _expandedTeamId = _expandedTeamId == teamId ? null : teamId;
+    }
+
+    private string GetAgentName(Guid agentId)
+    {
+        var agent = _agents.FirstOrDefault(a => a.Id == agentId);
+        return agent?.Name ?? agentId.ToString()[..8] + "…";
+    }
+
+    private async Task OpenCreateDialog()
+    {
+        var model = new Team();
+        var parameters = new DialogParameters<TeamDialog> { { x => x.Model, model } };
+        var dialog = await DialogService.ShowAsync<TeamDialog>("New Team", parameters);
+        var result = await dialog.Result;
+
+        if (result is { Canceled: false, Data: Team created })
+        {
+            try
+            {
+                var response = await Http.PostAsJsonAsync("api/teams", created);
+                response.EnsureSuccessStatusCode();
+                Snackbar.Add("Team created", Severity.Success);
+                await LoadTeamsAsync();
+            }
+            catch (Exception ex)
+            {
+                Snackbar.Add($"Error creating team: {ex.Message}", Severity.Error);
+            }
+        }
+    }
+
+    private async Task OpenEditDialog(Team team)
+    {
+        var model = new Team
+        {
+            Id          = team.Id,
+            Name        = team.Name,
+            Description = team.Description,
+            CreatedAt   = team.CreatedAt,
+            UpdatedAt   = team.UpdatedAt
+        };
+
+        var parameters = new DialogParameters<TeamDialog> { { x => x.Model, model } };
+        var dialog = await DialogService.ShowAsync<TeamDialog>("Edit Team", parameters);
+        var result = await dialog.Result;
+
+        if (result is { Canceled: false, Data: Team updated })
+        {
+            try
+            {
+                var response = await Http.PutAsJsonAsync($"api/teams/{updated.Id}", updated);
+                response.EnsureSuccessStatusCode();
+                Snackbar.Add("Team updated", Severity.Success);
+                await LoadTeamsAsync();
+            }
+            catch (Exception ex)
+            {
+                Snackbar.Add($"Error updating team: {ex.Message}", Severity.Error);
+            }
+        }
+    }
+
+    private async Task DeleteTeam(Team team)
+    {
+        var hasMembersWarning = team.Members.Count > 0
+            ? $" This team has {team.Members.Count} member(s) — they will be removed."
+            : "";
+
+        var parameters = new DialogParameters<ConfirmDialog>
+        {
+            { x => x.ContentText, $"Delete \"{team.Name}\"? This cannot be undone.{hasMembersWarning}" },
+            { x => x.ButtonText,  "Delete" }
+        };
+        var dialog = await DialogService.ShowAsync<ConfirmDialog>("Confirm Delete", parameters);
+        var result = await dialog.Result;
+
+        if (result is { Canceled: false })
+        {
+            try
+            {
+                var response = await Http.DeleteAsync($"api/teams/{team.Id}");
+                response.EnsureSuccessStatusCode();
+                Snackbar.Add("Team deleted", Severity.Success);
+                if (_expandedTeamId == team.Id) _expandedTeamId = null;
+                await LoadTeamsAsync();
+            }
+            catch (Exception ex)
+            {
+                Snackbar.Add($"Error deleting team: {ex.Message}", Severity.Error);
+            }
+        }
+    }
+
+    private async Task OpenAddMemberDialog(Team team)
+    {
+        // Refresh agents list
+        await LoadAgentsAsync();
+
+        var existingIds = team.Members.Select(m => m.AgentId).ToHashSet();
+
+        var parameters = new DialogParameters<AddMemberDialog>
+        {
+            { x => x.Agents, _agents },
+            { x => x.ExistingMemberIds, existingIds }
+        };
+        var dialog = await DialogService.ShowAsync<AddMemberDialog>("Add Member", parameters);
+        var result = await dialog.Result;
+
+        if (result is { Canceled: false, Data: Guid agentId } && agentId != Guid.Empty)
+        {
+            try
+            {
+                var response = await Http.PostAsync($"api/teams/{team.Id}/members/{agentId}", null);
+                response.EnsureSuccessStatusCode();
+                var agentName = GetAgentName(agentId);
+                Snackbar.Add($"{agentName} added to team", Severity.Success);
+                await LoadTeamsAsync();
+            }
+            catch (Exception ex)
+            {
+                Snackbar.Add($"Error adding member: {ex.Message}", Severity.Error);
+            }
+        }
+    }
+
+    private async Task RemoveMember(Team team, Guid agentId)
+    {
+        var agentName = GetAgentName(agentId);
+        var parameters = new DialogParameters<ConfirmDialog>
+        {
+            { x => x.ContentText, $"Remove {agentName} from \"{team.Name}\"?" },
+            { x => x.ButtonText,  "Remove" }
+        };
+        var dialog = await DialogService.ShowAsync<ConfirmDialog>("Confirm Remove", parameters);
+        var result = await dialog.Result;
+
+        if (result is { Canceled: false })
+        {
+            try
+            {
+                var response = await Http.DeleteAsync($"api/teams/{team.Id}/members/{agentId}");
+                response.EnsureSuccessStatusCode();
+                Snackbar.Add($"{agentName} removed from team", Severity.Success);
+                await LoadTeamsAsync();
+            }
+            catch (Exception ex)
+            {
+                Snackbar.Add($"Error removing member: {ex.Message}", Severity.Error);
+            }
+        }
+    }
+
+    private static string Truncate(string? text, int maxLength)
+    {
+        if (string.IsNullOrEmpty(text)) return "";
+        return text.Length <= maxLength ? text : text[..maxLength] + "…";
+    }
+}
