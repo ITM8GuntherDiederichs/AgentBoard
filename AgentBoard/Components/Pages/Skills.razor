@@ -2,9 +2,7 @@
 @rendermode @(new InteractiveServerRenderMode(prerender: false))
 @using AgentBoard.Data.Models
 @using AgentBoard.Contracts
-@inject HttpClient Http
-@inject IDialogService DialogService
-@inject ISnackbar Snackbar
+@using Microsoft.AspNetCore.Components.Forms
 
 <PageTitle>Skills — AgentBoard</PageTitle>
 
@@ -61,24 +59,47 @@
         <div class="skills-grid">
             @foreach (var skill in _skills)
             {
-                <div class="skill-card">
+                var isFilesExpanded = _expandedFilesSkillId == skill.Id;
+                var fileCount = _skillFiles.TryGetValue(skill.Id, out var files) ? files.Count : 0;
+                var isUploadingForSkill = _uploadingSkillId == skill.Id;
+
+                <div class="skill-card @(isFilesExpanded ? "skill-card--expanded" : "")">
+                    <!-- Card Header -->
                     <div class="skill-card-header">
                         <span class="skill-name">@skill.Name</span>
-                        <div class="skill-card-actions">
-                            <MudTooltip Text="Edit skill">
-                                <MudIconButton Icon="@Icons.Material.Filled.Edit"
-                                               Size="Size.Small"
-                                               Style="color:#00E5FF"
-                                               aria-label="@($"Edit {skill.Name}")"
-                                               OnClick="@(() => OpenEditDialog(skill))" />
-                            </MudTooltip>
-                            <MudTooltip Text="Delete skill">
-                                <MudIconButton Icon="@Icons.Material.Filled.Delete"
-                                               Size="Size.Small"
-                                               Color="Color.Error"
-                                               aria-label="@($"Delete {skill.Name}")"
-                                               OnClick="@(() => DeleteSkill(skill))" />
-                            </MudTooltip>
+                        <div style="display:flex; align-items:center; gap:0.5rem;">
+                            <!-- File count badge (clickable to toggle files panel) -->
+                            <span class="files-badge"
+                                  role="button"
+                                  tabindex="0"
+                                  aria-label="@($"Toggle files for {skill.Name}")"
+                                  aria-expanded="@isFilesExpanded.ToString().ToLower()"
+                                  @onclick="@(() => ToggleFilesAsync(skill.Id))"
+                                  @onkeydown="@(async (e) => { if (e.Key == "Enter" || e.Key == " ") await ToggleFilesAsync(skill.Id); })">
+                                <MudIcon Icon="@Icons.Material.Filled.AttachFile"
+                                         Size="Size.Small"
+                                         Style="color:#7B8EA8; vertical-align:middle; font-size:0.85rem;" />
+                                <span>@fileCount file@(fileCount == 1 ? "" : "s")</span>
+                                <MudIcon Icon="@(isFilesExpanded ? Icons.Material.Filled.ExpandLess : Icons.Material.Filled.ExpandMore)"
+                                         Size="Size.Small"
+                                         Style="color:#7B8EA8; font-size:0.85rem;" />
+                            </span>
+                            <div class="skill-card-actions" @onclick:stopPropagation="true">
+                                <MudTooltip Text="Edit skill">
+                                    <MudIconButton Icon="@Icons.Material.Filled.Edit"
+                                                   Size="Size.Small"
+                                                   Style="color:#00E5FF"
+                                                   aria-label="@($"Edit {skill.Name}")"
+                                                   OnClick="@(() => OpenEditDialog(skill))" />
+                                </MudTooltip>
+                                <MudTooltip Text="Delete skill">
+                                    <MudIconButton Icon="@Icons.Material.Filled.Delete"
+                                                   Size="Size.Small"
+                                                   Color="Color.Error"
+                                                   aria-label="@($"Delete {skill.Name}")"
+                                                   OnClick="@(() => DeleteSkill(skill))" />
+                                </MudTooltip>
+                            </div>
                         </div>
                     </div>
 
@@ -90,132 +111,85 @@
                     {
                         <p class="skill-content-preview no-content">No content defined</p>
                     }
+
+                    <!-- Files Panel (inline expand, uses display:none to avoid MudSelect issues) -->
+                    <div class="skill-files-section" style="display:@(isFilesExpanded ? "block" : "none");">
+                        <div class="skill-files-header">
+                            <MudText Typo="Typo.subtitle2"
+                                     Style="color:#7B8EA8; text-transform:uppercase; letter-spacing:0.1em; font-size:0.72rem;">
+                                📎 Reference Files
+                            </MudText>
+                            <div style="display:flex; align-items:center; gap:0.25rem;">
+                                @if (isUploadingForSkill)
+                                {
+                                    <MudProgressCircular Size="Size.Small" Indeterminate="true" Color="Color.Primary" Style="width:18px; height:18px;" />
+                                }
+                                <!-- Hidden file input — always in DOM to avoid MudSelect/popover issues -->
+                                <InputFile id="@($"file-upload-{skill.Id}")"
+                                           OnChange="@((e) => OnFileSelected(e, skill.Id))"
+                                           style="display:none"
+                                           accept="*/*" />
+                                <MudButton Variant="Variant.Text"
+                                           Size="Size.Small"
+                                           StartIcon="@Icons.Material.Filled.Upload"
+                                           Style="color:#00E5FF; font-size:0.75rem;"
+                                           Disabled="@isUploadingForSkill"
+                                           aria-label="@($"Upload file for {skill.Name}")"
+                                           OnClick="@(() => TriggerFileUpload(skill.Id))">Upload</MudButton>
+                            </div>
+                        </div>
+
+                        @if (_filesLoading.Contains(skill.Id))
+                        {
+                            <div class="file-item">
+                                <MudSkeleton Animation="Animation.Wave" Height="20px" Width="70%" />
+                                <MudSkeleton Animation="Animation.Wave" Height="20px" Width="20%" />
+                            </div>
+                        }
+                        else if (!_skillFiles.TryGetValue(skill.Id, out var skillFileList) || skillFileList.Count == 0)
+                        {
+                            <MudText Typo="Typo.caption"
+                                     Style="color:#4A5568; font-style:italic; display:block; padding:0.5rem 0;">
+                                No reference files yet
+                            </MudText>
+                        }
+                        else
+                        {
+                            <div class="file-list">
+                                @foreach (var file in skillFileList)
+                                {
+                                    var fileRef = file;
+                                    <div class="file-item">
+                                        <MudIcon Icon="@GetContentTypeIcon(fileRef.ContentType)"
+                                                 Size="Size.Small"
+                                                 Style="color:#7B8EA8; flex-shrink:0;" />
+                                        <span class="file-name" title="@fileRef.FileName">@fileRef.FileName</span>
+                                        <span class="file-size">@FormatFileSize(fileRef.FileSize)</span>
+                                        <div class="file-actions">
+                                            <MudTooltip Text="Download file">
+                                                <MudIconButton Icon="@Icons.Material.Filled.Download"
+                                                               Size="Size.Small"
+                                                               Style="color:#00E5FF;"
+                                                               aria-label="@($"Download {fileRef.FileName}")"
+                                                               OnClick="@(() => DownloadFile(skill.Id, fileRef.Id, fileRef.FileName))" />
+                                            </MudTooltip>
+                                            <MudTooltip Text="Delete file">
+                                                <MudIconButton Icon="@Icons.Material.Filled.DeleteOutline"
+                                                               Size="Size.Small"
+                                                               Color="Color.Error"
+                                                               aria-label="@($"Delete {fileRef.FileName}")"
+                                                               OnClick="@(() => DeleteFile(skill.Id, fileRef))" />
+                                            </MudTooltip>
+                                        </div>
+                                    </div>
+                                }
+                            </div>
+                        }
+                    </div>
                 </div>
             }
         </div>
     }
 </MudStack>
 
-@code {
-    private List<Skill> _skills = [];
-    private bool _loading = true;
-    private string? _initError;
 
-    protected override async Task OnInitializedAsync()
-    {
-        try
-        {
-            await LoadSkillsAsync();
-        }
-        catch (Exception ex)
-        {
-            _initError = ex.Message;
-            _loading = false;
-        }
-    }
-
-    private async Task LoadSkillsAsync()
-    {
-        _loading = true;
-        try
-        {
-            var skills = await Http.GetFromJsonAsync<List<Skill>>("api/skills");
-            _skills = skills ?? [];
-        }
-        catch (Exception ex)
-        {
-            _initError = ex.Message;
-        }
-        finally
-        {
-            _loading = false;
-        }
-    }
-
-    private async Task OpenCreateDialog()
-    {
-        var model = new Skill();
-        var parameters = new DialogParameters<SkillDialog> { { x => x.Model, model } };
-        var dialog = await DialogService.ShowAsync<SkillDialog>("New Skill", parameters);
-        var result = await dialog.Result;
-
-        if (result is { Canceled: false, Data: Skill created })
-        {
-            try
-            {
-                var response = await Http.PostAsJsonAsync("api/skills", created);
-                response.EnsureSuccessStatusCode();
-                Snackbar.Add("Skill created", Severity.Success);
-                await LoadSkillsAsync();
-            }
-            catch (Exception ex)
-            {
-                Snackbar.Add($"Error creating skill: {ex.Message}", Severity.Error);
-            }
-        }
-    }
-
-    private async Task OpenEditDialog(Skill skill)
-    {
-        var model = new Skill
-        {
-            Id        = skill.Id,
-            Name      = skill.Name,
-            Content   = skill.Content,
-            CreatedAt = skill.CreatedAt,
-            UpdatedAt = skill.UpdatedAt
-        };
-
-        var parameters = new DialogParameters<SkillDialog> { { x => x.Model, model } };
-        var dialog = await DialogService.ShowAsync<SkillDialog>("Edit Skill", parameters);
-        var result = await dialog.Result;
-
-        if (result is { Canceled: false, Data: Skill updated })
-        {
-            try
-            {
-                var patch = new SkillPatch(updated.Name, updated.Content);
-                var response = await Http.PatchAsJsonAsync($"api/skills/{updated.Id}", patch);
-                response.EnsureSuccessStatusCode();
-                Snackbar.Add("Skill updated", Severity.Success);
-                await LoadSkillsAsync();
-            }
-            catch (Exception ex)
-            {
-                Snackbar.Add($"Error updating skill: {ex.Message}", Severity.Error);
-            }
-        }
-    }
-
-    private async Task DeleteSkill(Skill skill)
-    {
-        var parameters = new DialogParameters<ConfirmDialog>
-        {
-            { x => x.ContentText, $"Delete \"{skill.Name}\"? This cannot be undone." },
-            { x => x.ButtonText,  "Delete" }
-        };
-        var dialog = await DialogService.ShowAsync<ConfirmDialog>("Confirm Delete", parameters);
-        var result = await dialog.Result;
-
-        if (result is { Canceled: false })
-        {
-            try
-            {
-                var response = await Http.DeleteAsync($"api/skills/{skill.Id}");
-                response.EnsureSuccessStatusCode();
-                Snackbar.Add("Skill deleted", Severity.Success);
-                await LoadSkillsAsync();
-            }
-            catch (Exception ex)
-            {
-                Snackbar.Add($"Error deleting skill: {ex.Message}", Severity.Error);
-            }
-        }
-    }
-
-    private static string Truncate(string? text, int maxLength)
-    {
-        if (string.IsNullOrEmpty(text)) return "";
-        return text.Length <= maxLength ? text : text[..maxLength] + "…";
-    }
-}
