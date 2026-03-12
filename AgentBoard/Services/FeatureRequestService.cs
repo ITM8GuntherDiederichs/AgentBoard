@@ -1,15 +1,9 @@
-﻿using AgentBoard.Data;
+﻿using AgentBoard.Contracts;
+using AgentBoard.Data;
 using AgentBoard.Data.Models;
 using Microsoft.EntityFrameworkCore;
 
 namespace AgentBoard.Services;
-
-/// <summary>Patch payload for partial updates to a <see cref="FeatureRequest"/>.</summary>
-public record FeatureRequestPatch(
-    string? Title,
-    string? Description,
-    TodoPriority? Priority,
-    FeatureRequestStatus? Status);
 
 /// <summary>Service for managing feature requests scoped to a project.</summary>
 public class FeatureRequestService(IDbContextFactory<ApplicationDbContext> factory)
