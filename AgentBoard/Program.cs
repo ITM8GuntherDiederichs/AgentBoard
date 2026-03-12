@@ -1,4 +1,4 @@
-using AgentBoard.Api;
+﻿using AgentBoard.Api;
 using AgentBoard.Components;
 using AgentBoard.Data;
 using AgentBoard.Hubs;
@@ -19,6 +19,7 @@ builder.Services.AddDbContextFactory<ApplicationDbContext>(options =>
 
 builder.Services.AddScoped<TodoService>();
 builder.Services.AddScoped<ProjectService>();
+builder.Services.AddScoped<FeatureRequestService>();
 builder.Services.AddHostedService<ClaimExpiryService>();
 
 builder.Services.AddMudServices();
@@ -57,6 +58,7 @@ app.UseAntiforgery();
 
 app.MapTodoEndpoints();
 app.MapProjectEndpoints();
+app.MapFeatureRequestEndpoints();
 
 app.MapHub<AgentBoardHub>("/hubs/agentboard");
 
