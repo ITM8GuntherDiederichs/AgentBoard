@@ -7,4 +7,6 @@ public record AgentPatch(
     string? Name,
     string? Description,
     AgentType? Type,
-    bool? IsAvailable);
+    bool? IsAvailable,
+    string? Instructions = null,
+    bool ClearInstructions = false);

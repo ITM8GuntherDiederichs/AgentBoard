@@ -23,4 +23,7 @@ public class Agent
 
     /// <summary>UTC timestamp when the agent was last updated.</summary>
     public DateTime UpdatedAt { get; set; }
+
+    /// <summary>Optional system prompt / instructions for this agent (markdown).</summary>
+    public string? Instructions { get; set; }
 }

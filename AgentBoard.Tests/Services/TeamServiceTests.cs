@@ -305,4 +305,50 @@ public class TeamServiceTests
         var found = await svc.GetByIdAsync(team.Id);
         Assert.Empty(found!.Members);
     }
+
+    // ── PatchAsync Instructions ───────────────────────────────────────────────
+
+    [Fact]
+    public async Task PatchAsync_SetsInstructions_WhenProvided()
+    {
+        var svc = BuildService();
+        var created = await svc.CreateAsync(MakeTeam());
+        var updated = await svc.PatchAsync(created.Id,
+            new AgentBoard.Contracts.TeamPatch(null, null, Instructions: "# Team instructions"));
+        Assert.NotNull(updated);
+        Assert.Equal("# Team instructions", updated.Instructions);
+    }
+
+    [Fact]
+    public async Task PatchAsync_ClearsInstructions_WhenClearInstructionsIsTrue()
+    {
+        var svc = BuildService();
+        var created = await svc.CreateAsync(MakeTeam());
+        await svc.PatchAsync(created.Id,
+            new AgentBoard.Contracts.TeamPatch(null, null, Instructions: "Some instructions"));
+        var updated = await svc.PatchAsync(created.Id,
+            new AgentBoard.Contracts.TeamPatch(null, null, ClearInstructions: true));
+        Assert.NotNull(updated);
+        Assert.Null(updated.Instructions);
+    }
+
+    [Fact]
+    public async Task PatchAsync_UpdatesName_WhenProvided()
+    {
+        var svc = BuildService();
+        var created = await svc.CreateAsync(MakeTeam("Original Name"));
+        var updated = await svc.PatchAsync(created.Id,
+            new AgentBoard.Contracts.TeamPatch("Updated Name", null));
+        Assert.NotNull(updated);
+        Assert.Equal("Updated Name", updated.Name);
+    }
+
+    [Fact]
+    public async Task PatchAsync_ReturnsNull_WhenNotFound()
+    {
+        var svc = BuildService();
+        var result = await svc.PatchAsync(Guid.NewGuid(),
+            new AgentBoard.Contracts.TeamPatch("Ghost", null));
+        Assert.Null(result);
+    }
 }

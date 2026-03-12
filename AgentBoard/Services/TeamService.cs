@@ -1,3 +1,4 @@
+using AgentBoard.Contracts;
 using AgentBoard.Data;
 using AgentBoard.Data.Models;
 using Microsoft.EntityFrameworkCore;
@@ -58,6 +59,26 @@ public class TeamService(IDbContextFactory<ApplicationDbContext> factory)
         existing.UpdatedAt = DateTime.UtcNow;
         await db.SaveChangesAsync();
         return existing;
+    }
+
+    /// <summary>Applies a partial update to the team identified by <paramref name="id"/>.</summary>
+    /// <returns>The updated team (including members), or <c>null</c> if not found.</returns>
+    public async Task<Team?> PatchAsync(Guid id, TeamPatch patch)
+    {
+        using var db = await factory.CreateDbContextAsync();
+        var team = await db.Teams
+            .Include(t => t.Members)
+            .FirstOrDefaultAsync(t => t.Id == id);
+        if (team is null) return null;
+
+        if (patch.Name is not null) team.Name = patch.Name;
+        if (patch.Description is not null) team.Description = patch.Description;
+        if (patch.ClearInstructions) team.Instructions = null;
+        else if (patch.Instructions is not null) team.Instructions = patch.Instructions;
+        team.UpdatedAt = DateTime.UtcNow;
+
+        await db.SaveChangesAsync();
+        return team;
     }
 
     /// <summary>

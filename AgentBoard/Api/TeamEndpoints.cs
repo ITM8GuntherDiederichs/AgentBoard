@@ -1,3 +1,4 @@
+using AgentBoard.Contracts;
 using AgentBoard.Data.Models;
 using AgentBoard.Services;
 
@@ -34,6 +35,13 @@ public static class TeamEndpoints
         {
             team.Id = id;
             var updated = await svc.UpdateAsync(team);
+            return updated is null ? Results.NotFound() : Results.Ok(updated);
+        });
+
+        // PATCH /api/teams/{id}
+        group.MapPatch("/{id:guid}", async (Guid id, TeamPatch patch, TeamService svc) =>
+        {
+            var updated = await svc.PatchAsync(id, patch);
             return updated is null ? Results.NotFound() : Results.Ok(updated);
         });
 

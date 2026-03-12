@@ -37,6 +37,9 @@ namespace AgentBoard.Migrations
                     b.Property<bool>("IsAvailable")
                         .HasColumnType("bit");
 
+                    b.Property<string>("Instructions")
+                        .HasColumnType("nvarchar(max)");
+
                     b.Property<string>("Name")
                         .IsRequired()
                         .HasMaxLength(200)
@@ -53,6 +56,21 @@ namespace AgentBoard.Migrations
                     b.HasIndex("IsAvailable");
 
                     b.ToTable("Agents");
+                });
+
+            modelBuilder.Entity("AgentBoard.Data.Models.AgentSkill", b =>
+                {
+                    b.Property<Guid>("AgentId")
+                        .HasColumnType("uniqueidentifier");
+
+                    b.Property<Guid>("SkillId")
+                        .HasColumnType("uniqueidentifier");
+
+                    b.HasKey("AgentId", "SkillId");
+
+                    b.HasIndex("SkillId");
+
+                    b.ToTable("AgentSkills");
                 });
 
             modelBuilder.Entity("AgentBoard.Data.Models.FeatureRequest", b =>
@@ -155,6 +173,34 @@ namespace AgentBoard.Migrations
                     b.ToTable("ProjectTeams");
                 });
 
+            modelBuilder.Entity("AgentBoard.Data.Models.Skill", b =>
+                {
+                    b.Property<Guid>("Id")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("uniqueidentifier");
+
+                    b.Property<string>("Content")
+                        .IsRequired()
+                        .HasColumnType("nvarchar(max)");
+
+                    b.Property<DateTime>("CreatedAt")
+                        .HasColumnType("datetime2");
+
+                    b.Property<string>("Name")
+                        .IsRequired()
+                        .HasMaxLength(200)
+                        .HasColumnType("nvarchar(200)");
+
+                    b.Property<DateTime>("UpdatedAt")
+                        .HasColumnType("datetime2");
+
+                    b.HasKey("Id");
+
+                    b.HasIndex("Name");
+
+                    b.ToTable("Skills");
+                });
+
             modelBuilder.Entity("AgentBoard.Data.Models.Team", b =>
                 {
                     b.Property<Guid>("Id")
@@ -165,6 +211,9 @@ namespace AgentBoard.Migrations
                         .HasColumnType("datetime2");
 
                     b.Property<string>("Description")
+                        .HasColumnType("nvarchar(max)");
+
+                    b.Property<string>("Instructions")
                         .HasColumnType("nvarchar(max)");
 
                     b.Property<string>("Name")
@@ -196,6 +245,21 @@ namespace AgentBoard.Migrations
                     b.HasIndex("AgentId");
 
                     b.ToTable("TeamMembers");
+                });
+
+            modelBuilder.Entity("AgentBoard.Data.Models.TeamSkill", b =>
+                {
+                    b.Property<Guid>("TeamId")
+                        .HasColumnType("uniqueidentifier");
+
+                    b.Property<Guid>("SkillId")
+                        .HasColumnType("uniqueidentifier");
+
+                    b.HasKey("TeamId", "SkillId");
+
+                    b.HasIndex("SkillId");
+
+                    b.ToTable("TeamSkills");
                 });
 
             modelBuilder.Entity("AgentBoard.Data.Models.Todo", b =>
