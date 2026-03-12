@@ -1,0 +1,60 @@
+@using AgentBoard.Data.Models
+
+<MudDialog>
+    <DialogContent>
+        <MudStack Spacing="3" Class="pt-1">
+            <MudTextField T="string"
+                          Label="Name"
+                          @bind-Value="Model.Name"
+                          Required="true"
+                          RequiredError="Name is required"
+                          MaxLength="200"
+                          Counter="200"
+                          Variant="Variant.Outlined"
+                          Immediate="true"
+                          aria-label="Agent name" />
+
+            @* MudSelect is always rendered (never inside @if) per MudBlazor v9 rules *@
+            <MudSelect T="AgentType"
+                       Label="Type"
+                       @bind-Value="Model.Type"
+                       Variant="Variant.Outlined"
+                       aria-label="Agent type">
+                <MudSelectItem T="AgentType" Value="AgentType.AI">AI</MudSelectItem>
+                <MudSelectItem T="AgentType" Value="AgentType.Human">Human</MudSelectItem>
+            </MudSelect>
+
+            <MudTextField T="string"
+                          Label="Description"
+                          @bind-Value="Model.Description"
+                          Lines="3"
+                          MaxLength="2000"
+                          Variant="Variant.Outlined"
+                          HelperText="Optional: describe the agent's role or capabilities"
+                          aria-label="Agent description" />
+
+            <MudSwitch T="bool"
+                       @bind-Value="Model.IsAvailable"
+                       Color="Color.Success"
+                       Label="@(Model.IsAvailable ? "Available" : "Offline")"
+                       aria-label="Agent availability" />
+        </MudStack>
+    </DialogContent>
+    <DialogActions>
+        <MudButton OnClick="Cancel" aria-label="Cancel">Cancel</MudButton>
+        <MudButton Color="Color.Primary"
+                   Variant="Variant.Filled"
+                   OnClick="Submit"
+                   Disabled="@(string.IsNullOrWhiteSpace(Model.Name))"
+                   aria-label="Save agent">Save</MudButton>
+    </DialogActions>
+</MudDialog>
+
+@code {
+    [CascadingParameter] IMudDialogInstance MudDialog { get; set; } = default!;
+
+    [Parameter] public Agent Model { get; set; } = new();
+
+    void Submit() => MudDialog.Close(DialogResult.Ok(Model));
+    void Cancel() => MudDialog.Cancel();
+}

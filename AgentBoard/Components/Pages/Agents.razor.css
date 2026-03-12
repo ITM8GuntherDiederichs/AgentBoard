@@ -1,0 +1,139 @@
+/* ─── Agents Grid ──────────────────────────────────────────── */
+.agents-grid {
+    display: grid;
+    grid-template-columns: repeat(auto-fill, minmax(300px, 1fr));
+    gap: 1.25rem;
+}
+
+/* ─── Agent Card ────────────────────────────────────────────── */
+.agent-card {
+    background: #0D1220;
+    border: 1px solid #1E2D45;
+    border-radius: 8px;
+    padding: 1.25rem;
+    display: flex;
+    flex-direction: column;
+    gap: 0.625rem;
+    transition: border-color 0.2s ease, box-shadow 0.2s ease;
+}
+
+.agent-card:hover {
+    border-color: #00E5FF33;
+    box-shadow: 0 0 20px rgba(0, 229, 255, 0.07), 0 4px 16px rgba(0, 0, 0, 0.4);
+}
+
+/* ─── Card Header ──────────────────────────────────────────── */
+.agent-card-header {
+    display: flex;
+    align-items: flex-start;
+    justify-content: space-between;
+    gap: 0.5rem;
+}
+
+.agent-name {
+    font-family: 'Orbitron', sans-serif;
+    color: #00E5FF;
+    font-size: 0.95rem;
+    font-weight: 600;
+    letter-spacing: 0.05em;
+    text-shadow: 0 0 10px rgba(0, 229, 255, 0.3);
+    flex: 1;
+    word-break: break-word;
+    line-height: 1.4;
+}
+
+.agent-card-actions {
+    display: flex;
+    gap: 0.125rem;
+    flex-shrink: 0;
+    margin-top: -6px;
+    margin-right: -6px;
+}
+
+/* ─── Chips Row ─────────────────────────────────────────────── */
+.agent-card-chips {
+    display: flex;
+    align-items: center;
+    gap: 0.625rem;
+    flex-wrap: wrap;
+}
+
+/* Type chip — AI (neon cyan) */
+::deep .chip-ai {
+    background-color: rgba(0, 229, 255, 0.12) !important;
+    color: #00E5FF !important;
+    border: 1px solid rgba(0, 229, 255, 0.35) !important;
+    font-size: 0.7rem;
+    font-weight: 600;
+    letter-spacing: 0.08em;
+    text-transform: uppercase;
+}
+
+/* Type chip — Human (purple/magenta) */
+::deep .chip-human {
+    background-color: rgba(156, 39, 176, 0.18) !important;
+    color: #CE93D8 !important;
+    border: 1px solid rgba(156, 39, 176, 0.45) !important;
+    font-size: 0.7rem;
+    font-weight: 600;
+    letter-spacing: 0.08em;
+    text-transform: uppercase;
+}
+
+/* ─── Availability Badge ─────────────────────────────────────── */
+.availability-badge {
+    display: inline-flex;
+    align-items: center;
+    gap: 0.375rem;
+    font-size: 0.75rem;
+    font-weight: 500;
+    letter-spacing: 0.04em;
+}
+
+.availability-badge.available {
+    color: #4ADE80;
+}
+
+.availability-badge.offline {
+    color: #F87171;
+}
+
+.dot {
+    width: 7px;
+    height: 7px;
+    border-radius: 50%;
+    flex-shrink: 0;
+}
+
+.dot-available {
+    background-color: #4ADE80;
+    box-shadow: 0 0 6px rgba(74, 222, 128, 0.7);
+}
+
+.dot-offline {
+    background-color: #F87171;
+    box-shadow: 0 0 6px rgba(248, 113, 113, 0.7);
+}
+
+/* ─── Description ───────────────────────────────────────────── */
+.agent-description {
+    color: #A0AEC0;
+    font-size: 0.875rem;
+    line-height: 1.55;
+    margin: 0;
+    flex: 1;
+}
+
+.agent-description.no-description {
+    color: #4A5568;
+    font-style: italic;
+}
+
+/* ─── Skeleton placeholder ──────────────────────────────────── */
+.agent-card-skeleton {
+    background: #0D1220 !important;
+    border: 1px solid #1E2D45 !important;
+    border-radius: 8px !important;
+    padding: 1.25rem;
+    height: 160px;
+}
