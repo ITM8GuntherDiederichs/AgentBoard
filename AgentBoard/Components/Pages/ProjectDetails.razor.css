@@ -77,7 +77,8 @@
     border-radius: 4px;
 }
 
-.assignment-details {
+.assignment-details,
+.event-details {
     flex: 1;
     min-width: 0;
     display: flex;
