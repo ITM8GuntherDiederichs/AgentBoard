@@ -144,3 +144,32 @@ body::before {
 ::-webkit-scrollbar-track { background: #0A0E1A; }
 ::-webkit-scrollbar-thumb { background: #1E2D45; border-radius: 3px; }
 ::-webkit-scrollbar-thumb:hover { background: #00E5FF; }
+
+/* ─── AppBar Navigation Links ──────────────────────────────── */
+a.app-nav-link {
+    font-family: 'Orbitron', sans-serif;
+    color: #7B8EA8;
+    text-decoration: none;
+    letter-spacing: 0.08em;
+    font-size: 0.7rem;
+    text-transform: uppercase;
+    padding: 6px 14px;
+    border-radius: 4px;
+    border: 1px solid transparent;
+    transition: color 0.2s ease, border-color 0.2s ease, text-shadow 0.2s ease;
+    white-space: nowrap;
+    display: inline-block;
+}
+
+a.app-nav-link:hover {
+    color: #00E5FF;
+    border-color: #1E2D45;
+    text-decoration: none;
+}
+
+a.app-nav-link.active {
+    color: #00E5FF;
+    border-color: #00E5FF;
+    text-shadow: 0 0 8px rgba(0, 229, 255, 0.4);
+    text-decoration: none;
+}

@@ -3,6 +3,7 @@ using AgentBoard.Components;
 using AgentBoard.Data;
 using AgentBoard.Hubs;
 using AgentBoard.Services;
+using Microsoft.AspNetCore.Components;
 using Microsoft.EntityFrameworkCore;
 using MudBlazor.Services;
 
@@ -23,6 +24,14 @@ builder.Services.AddScoped<FeatureRequestService>();
 builder.Services.AddHostedService<ClaimExpiryService>();
 
 builder.Services.AddMudServices();
+
+// Circuit-scoped HttpClient for Blazor pages that call the same-server API.
+// NavigationManager provides the correct base URI (scheme + host + port) for each circuit.
+builder.Services.AddScoped(sp =>
+{
+    var nav = sp.GetRequiredService<NavigationManager>();
+    return new HttpClient { BaseAddress = new Uri(nav.BaseUri) };
+});
 
 var app = builder.Build();
 

@@ -1,0 +1,280 @@
+@page "/projects"
+@rendermode @(new InteractiveServerRenderMode(prerender: false))
+@using AgentBoard.Contracts
+@using AgentBoard.Data.Models
+@inject HttpClient Http
+@inject IDialogService DialogService
+@inject ISnackbar Snackbar
+@inject NavigationManager Nav
+
+<PageTitle>Projects — AgentBoard</PageTitle>
+
+@if (_initError is not null)
+{
+    <MudAlert Severity="Severity.Error" Class="mb-4">Failed to load projects: @_initError</MudAlert>
+}
+
+<MudStack Spacing="3">
+    <MudStack Row="true" AlignItems="AlignItems.Center" Justify="Justify.SpaceBetween">
+        <MudText Typo="Typo.h4" Style="font-family:'Orbitron',sans-serif; color:#00E5FF; letter-spacing:0.05em; text-shadow: 0 0 15px rgba(0,229,255,0.4);">
+            ⬡ PROJECTS
+        </MudText>
+        <MudButton Variant="Variant.Filled"
+                   Color="Color.Primary"
+                   StartIcon="@Icons.Material.Filled.Add"
+                   aria-label="Create new project"
+                   OnClick="OpenCreateDialog">New Project</MudButton>
+    </MudStack>
+
+    @if (_loading)
+    {
+        <MudGrid>
+            @for (int i = 0; i < 6; i++)
+            {
+                <MudItem xs="12" sm="6" md="4">
+                    <MudPaper Style="background:#0D1220; border:1px solid #1E2D45; border-radius:8px; padding:1.25rem; height:200px;">
+                        <MudSkeleton Animation="Animation.Wave" Height="24px" Width="60%" />
+                        <MudSkeleton Animation="Animation.Wave" Height="16px" Class="mt-3" />
+                        <MudSkeleton Animation="Animation.Wave" Height="16px" Width="80%" Class="mt-1" />
+                        <MudSkeleton Animation="Animation.Wave" Height="16px" Width="50%" Class="mt-1" />
+                    </MudPaper>
+                </MudItem>
+            }
+        </MudGrid>
+    }
+    else if (_projects.Count == 0 && _initError is null)
+    {
+        <MudPaper Class="pa-8" Elevation="0"
+                  Style="background:#0D1220; border:1px solid #1E2D45; border-radius:8px; text-align:center;">
+            <MudIcon Icon="@Icons.Material.Filled.FolderOpen"
+                     Style="font-size:4rem; color:#1E2D45; display:block; margin:0 auto 1rem;" />
+            <MudText Typo="Typo.h6" Style="color:#7B8EA8;">No projects yet</MudText>
+            <MudText Style="color:#4A5568; margin-top:0.5rem;">
+                Create your first project to organise agent tasks.
+            </MudText>
+            <MudButton Variant="Variant.Filled"
+                       Color="Color.Primary"
+                       Class="mt-4"
+                       StartIcon="@Icons.Material.Filled.Add"
+                       OnClick="OpenCreateDialog">New Project</MudButton>
+        </MudPaper>
+    }
+    else
+    {
+        <div class="projects-grid">
+            @foreach (var project in _projects)
+            {
+                <div class="project-card"
+                     role="button"
+                     tabindex="0"
+                     aria-label="@($"Open project {project.Name}")"
+                     @onclick="@(() => Nav.NavigateTo($"/projects/{project.Id}"))"
+                     @onkeydown="@((e) => { if (e.Key == "Enter" || e.Key == " ") Nav.NavigateTo($"/projects/{project.Id}"); })">
+
+                    <div class="project-card-header">
+                        <span class="project-name">@project.Name</span>
+                        <div class="project-card-actions" @onclick:stopPropagation="true">
+                            <MudTooltip Text="Edit project">
+                                <MudIconButton Icon="@Icons.Material.Filled.Edit"
+                                               Size="Size.Small"
+                                               Style="color:#00E5FF"
+                                               aria-label="@($"Edit {project.Name}")"
+                                               OnClick="@(() => OpenEditDialog(project))" />
+                            </MudTooltip>
+                            <MudTooltip Text="Delete project">
+                                <MudIconButton Icon="@Icons.Material.Filled.Delete"
+                                               Size="Size.Small"
+                                               Color="Color.Error"
+                                               aria-label="@($"Delete {project.Name}")"
+                                               OnClick="@(() => DeleteProject(project))" />
+                            </MudTooltip>
+                        </div>
+                    </div>
+
+                    <div class="project-card-body">
+                        @if (!string.IsNullOrWhiteSpace(project.Description))
+                        {
+                            <p class="project-description">@Truncate(project.Description, 120)</p>
+                        }
+                        else
+                        {
+                            <p class="project-description no-description">No description</p>
+                        }
+                    </div>
+
+                    <div class="project-card-footer">
+                        <div class="project-stat">
+                            <MudIcon Icon="@Icons.Material.Filled.Task"
+                                     Size="Size.Small"
+                                     Style="color:#00E5FF" />
+                            <span>@_todoCounts.GetValueOrDefault(project.Id, 0) todo(s)</span>
+                        </div>
+                        <div class="project-stat">
+                            <MudIcon Icon="@Icons.Material.Filled.SmartToy"
+                                     Size="Size.Small"
+                                     Style="color:#9C27B0" />
+                            <span>@_activeAgents.GetValueOrDefault(project.Id, 0) active agent(s)</span>
+                        </div>
+                    </div>
+                </div>
+            }
+        </div>
+    }
+</MudStack>
+
+@code {
+    private List<Project> _projects = [];
+    private Dictionary<Guid, int> _todoCounts = new();
+    private Dictionary<Guid, int> _activeAgents = new();
+    private bool _loading = true;
+    private string? _initError;
+
+    protected override async Task OnInitializedAsync()
+    {
+        try
+        {
+            await LoadProjectsAsync();
+        }
+        catch (Exception ex)
+        {
+            _initError = ex.Message;
+            _loading = false;
+        }
+    }
+
+    private async Task LoadProjectsAsync()
+    {
+        _loading = true;
+        try
+        {
+            var projects = await Http.GetFromJsonAsync<List<Project>>("api/projects");
+            _projects = projects ?? [];
+            await LoadTodoCountsAsync();
+        }
+        catch (Exception ex)
+        {
+            _initError = ex.Message;
+        }
+        finally
+        {
+            _loading = false;
+        }
+    }
+
+    private async Task LoadTodoCountsAsync()
+    {
+        if (_projects.Count == 0) return;
+
+        var tasks = _projects.Select(async p =>
+        {
+            try
+            {
+                // pageSize=100 lets us derive active-agent count from the returned items
+                // while TotalCount gives the accurate total even if there are more than 100 todos
+                var result = await Http.GetFromJsonAsync<PagedResult<Todo>>(
+                    $"api/todos?projectId={p.Id}&pageSize=100");
+                if (result is not null)
+                {
+                    _todoCounts[p.Id]   = result.TotalCount;
+                    _activeAgents[p.Id] = result.Items
+                        .Count(t => t.Status == TodoStatus.InProgress && t.ClaimedBy is not null);
+                }
+            }
+            catch
+            {
+                _todoCounts[p.Id]   = 0;
+                _activeAgents[p.Id] = 0;
+            }
+        });
+
+        await Task.WhenAll(tasks);
+    }
+
+    private async Task OpenCreateDialog()
+    {
+        var model = new Project();
+        var parameters = new DialogParameters<ProjectDialog> { { x => x.Model, model } };
+        var dialog = await DialogService.ShowAsync<ProjectDialog>("New Project", parameters);
+        var result = await dialog.Result;
+
+        if (result is { Canceled: false, Data: Project created })
+        {
+            try
+            {
+                var response = await Http.PostAsJsonAsync("api/projects", created);
+                response.EnsureSuccessStatusCode();
+                Snackbar.Add("Project created", Severity.Success);
+                await LoadProjectsAsync();
+            }
+            catch (Exception ex)
+            {
+                Snackbar.Add($"Error creating project: {ex.Message}", Severity.Error);
+            }
+        }
+    }
+
+    private async Task OpenEditDialog(Project project)
+    {
+        // Clone to avoid mutating the displayed list while the dialog is open
+        var model = new Project
+        {
+            Id          = project.Id,
+            Name        = project.Name,
+            Description = project.Description,
+            Goals       = project.Goals,
+            CreatedAt   = project.CreatedAt,
+            UpdatedAt   = project.UpdatedAt
+        };
+
+        var parameters = new DialogParameters<ProjectDialog> { { x => x.Model, model } };
+        var dialog = await DialogService.ShowAsync<ProjectDialog>("Edit Project", parameters);
+        var result = await dialog.Result;
+
+        if (result is { Canceled: false, Data: Project updated })
+        {
+            try
+            {
+                var response = await Http.PutAsJsonAsync($"api/projects/{updated.Id}", updated);
+                response.EnsureSuccessStatusCode();
+                Snackbar.Add("Project updated", Severity.Success);
+                await LoadProjectsAsync();
+            }
+            catch (Exception ex)
+            {
+                Snackbar.Add($"Error updating project: {ex.Message}", Severity.Error);
+            }
+        }
+    }
+
+    private async Task DeleteProject(Project project)
+    {
+        var parameters = new DialogParameters<ConfirmDialog>
+        {
+            { x => x.ContentText, $"Delete \"{project.Name}\"? This cannot be undone." },
+            { x => x.ButtonText,  "Delete" }
+        };
+        var dialog = await DialogService.ShowAsync<ConfirmDialog>("Confirm Delete", parameters);
+        var result = await dialog.Result;
+
+        if (result is { Canceled: false })
+        {
+            try
+            {
+                var response = await Http.DeleteAsync($"api/projects/{project.Id}");
+                response.EnsureSuccessStatusCode();
+                Snackbar.Add("Project deleted", Severity.Success);
+                await LoadProjectsAsync();
+            }
+            catch (Exception ex)
+            {
+                Snackbar.Add($"Error deleting project: {ex.Message}", Severity.Error);
+            }
+        }
+    }
+
+    private static string Truncate(string? text, int maxLength)
+    {
+        if (string.IsNullOrEmpty(text)) return "";
+        return text.Length <= maxLength ? text : text[..maxLength] + "…";
+    }
+}

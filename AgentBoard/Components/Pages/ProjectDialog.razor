@@ -1,0 +1,51 @@
+@using AgentBoard.Data.Models
+
+<MudDialog>
+    <DialogContent>
+        <MudStack Spacing="3" Class="pt-1">
+            <MudTextField T="string"
+                          Label="Name"
+                          @bind-Value="Model.Name"
+                          Required="true"
+                          RequiredError="Name is required"
+                          MaxLength="200"
+                          Counter="200"
+                          Variant="Variant.Outlined"
+                          Immediate="true"
+                          aria-label="Project name" />
+            <MudTextField T="string"
+                          Label="Description"
+                          @bind-Value="Model.Description"
+                          Lines="3"
+                          MaxLength="2000"
+                          Variant="Variant.Outlined"
+                          HelperText="Brief summary of what this project covers"
+                          aria-label="Project description" />
+            <MudTextField T="string"
+                          Label="Goals"
+                          @bind-Value="Model.Goals"
+                          Lines="3"
+                          MaxLength="2000"
+                          Variant="Variant.Outlined"
+                          HelperText="What does success look like for this project?"
+                          aria-label="Project goals" />
+        </MudStack>
+    </DialogContent>
+    <DialogActions>
+        <MudButton OnClick="Cancel" aria-label="Cancel">Cancel</MudButton>
+        <MudButton Color="Color.Primary"
+                   Variant="Variant.Filled"
+                   OnClick="Submit"
+                   Disabled="@(string.IsNullOrWhiteSpace(Model.Name))"
+                   aria-label="Save project">Save</MudButton>
+    </DialogActions>
+</MudDialog>
+
+@code {
+    [CascadingParameter] IMudDialogInstance MudDialog { get; set; } = default!;
+
+    [Parameter] public Project Model { get; set; } = new();
+
+    void Submit() => MudDialog.Close(DialogResult.Ok(Model));
+    void Cancel() => MudDialog.Cancel();
+}
