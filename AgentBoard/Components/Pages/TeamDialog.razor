@@ -21,6 +21,13 @@
                           Variant="Variant.Outlined"
                           HelperText="Brief summary of this team's purpose"
                           aria-label="Team description" />
+            <MudTextField T="string"
+                          Label="Team Instructions"
+                          @bind-Value="Model.Instructions"
+                          Lines="6"
+                          Variant="Variant.Outlined"
+                          HelperText="Shared guidelines for all agents in this team"
+                          aria-label="Team instructions" />
         </MudStack>
     </DialogContent>
     <DialogActions>
