@@ -10,6 +10,8 @@ public class ApplicationDbContext(DbContextOptions<ApplicationDbContext> options
     public DbSet<Project> Projects => Set<Project>();
     public DbSet<FeatureRequest> FeatureRequests => Set<FeatureRequest>();
     public DbSet<Agent> Agents => Set<Agent>();
+    public DbSet<Team> Teams => Set<Team>();
+    public DbSet<TeamMember> TeamMembers => Set<TeamMember>();
 
     protected override void OnModelCreating(ModelBuilder modelBuilder)
     {
@@ -45,6 +47,22 @@ public class ApplicationDbContext(DbContextOptions<ApplicationDbContext> options
             e.Property(te => te.TodoTitle).HasMaxLength(200);
             e.Property(te => te.EventType).HasMaxLength(50);
             e.Property(te => te.Actor).HasMaxLength(100);
+        });
+
+        modelBuilder.Entity<Team>(e =>
+        {
+            e.Property(t => t.Name).IsRequired().HasMaxLength(200);
+        });
+
+        modelBuilder.Entity<TeamMember>(e =>
+        {
+            e.HasKey(tm => new { tm.TeamId, tm.AgentId });
+            e.HasIndex(tm => tm.AgentId);
+            // No FK constraint to Agents table — AgentId is a plain Guid reference
+            e.HasOne(tm => tm.Team)
+                .WithMany(t => t.Members)
+                .HasForeignKey(tm => tm.TeamId)
+                .OnDelete(DeleteBehavior.Cascade);
         });
     }
 

@@ -22,6 +22,7 @@ builder.Services.AddScoped<TodoService>();
 builder.Services.AddScoped<ProjectService>();
 builder.Services.AddScoped<FeatureRequestService>();
 builder.Services.AddScoped<AgentService>();
+builder.Services.AddScoped<TeamService>();
 builder.Services.AddHostedService<ClaimExpiryService>();
 
 builder.Services.AddMudServices();
@@ -70,6 +71,7 @@ app.MapTodoEndpoints();
 app.MapProjectEndpoints();
 app.MapFeatureRequestEndpoints();
 app.MapAgentEndpoints();
+app.MapTeamEndpoints();
 
 app.MapHub<AgentBoardHub>("/hubs/agentboard");
 
