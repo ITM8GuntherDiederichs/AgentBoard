@@ -1,3 +1,4 @@
+using AgentBoard.Contracts;
 using AgentBoard.Data;
 using AgentBoard.Data.Models;
 using Microsoft.EntityFrameworkCore;
@@ -47,6 +48,27 @@ public class ProjectService(IDbContextFactory<ApplicationDbContext> factory)
         existing.UpdatedAt = DateTime.UtcNow;
         await db.SaveChangesAsync();
         return existing;
+    }
+
+    /// <summary>Applies a partial update to the project identified by <paramref name="id"/>.</summary>
+    /// <returns>The updated project, or <c>null</c> if not found.</returns>
+    public async Task<Project?> PatchAsync(Guid id, ProjectPatch patch)
+    {
+        using var db = await factory.CreateDbContextAsync();
+        var project = await db.Projects.FindAsync(id);
+        if (project is null) return null;
+
+        if (patch.Name is not null) project.Name = patch.Name;
+        if (patch.Description is not null) project.Description = patch.Description;
+        if (patch.Goals is not null) project.Goals = patch.Goals;
+        if (patch.ClearIntegrationToken) project.IntegrationToken = null;
+        else if (patch.IntegrationToken is not null) project.IntegrationToken = patch.IntegrationToken;
+        if (patch.IntegrationRepoUrl is not null) project.IntegrationRepoUrl = patch.IntegrationRepoUrl;
+        if (patch.ExternalProjectId is not null) project.ExternalProjectId = patch.ExternalProjectId;
+        project.UpdatedAt = DateTime.UtcNow;
+
+        await db.SaveChangesAsync();
+        return project;
     }
 
     /// <summary>Deletes a project by ID. Returns <c>true</c> if deleted, <c>false</c> if not found.</summary>

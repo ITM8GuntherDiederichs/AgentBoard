@@ -21,6 +21,12 @@ public class Team
     /// <summary>Optional system prompt / instructions for this team (markdown).</summary>
     public string? Instructions { get; set; }
 
+    /// <summary>External source control / CI integration type for this team.</summary>
+    public IntegrationType IntegrationType { get; set; } = IntegrationType.None;
+
+    /// <summary>Optional repository URL associated with this team's integration.</summary>
+    public string? RepoUrl { get; set; }
+
     /// <summary>Members of this team.</summary>
     public ICollection<TeamMember> Members { get; set; } = new List<TeamMember>();
 }
