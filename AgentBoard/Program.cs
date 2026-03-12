@@ -28,6 +28,10 @@ builder.Services.AddScoped<SkillService>();
 builder.Services.AddScoped<SkillFileService>();
 builder.Services.AddScoped<DeployService>();
 builder.Services.AddHostedService<ClaimExpiryService>();
+builder.Services.AddScoped<IntegrationService>();
+
+builder.Services.AddHttpClient();
+builder.Services.AddHttpClient("IntegrationValidator");
 
 builder.Services.AddMudServices();
 
