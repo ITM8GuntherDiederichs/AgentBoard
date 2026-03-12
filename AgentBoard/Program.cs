@@ -25,6 +25,7 @@ builder.Services.AddScoped<AgentService>();
 builder.Services.AddScoped<TeamService>();
 builder.Services.AddScoped<ProjectAssignmentService>();
 builder.Services.AddScoped<SkillService>();
+builder.Services.AddScoped<SkillFileService>();
 builder.Services.AddHostedService<ClaimExpiryService>();
 
 builder.Services.AddMudServices();
@@ -76,6 +77,7 @@ app.MapFeatureRequestEndpoints();
 app.MapAgentEndpoints();
 app.MapTeamEndpoints();
 app.MapSkillEndpoints();
+app.MapSkillFileEndpoints();
 
 app.MapHub<AgentBoardHub>("/hubs/agentboard");
 
