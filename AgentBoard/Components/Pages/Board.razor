@@ -17,7 +17,7 @@
 
 <MudStack Spacing="3">
     <MudStack Row="true" AlignItems="AlignItems.Center" Justify="Justify.SpaceBetween">
-        <MudText Typo="Typo.h4" Style="font-family:'Orbitron',sans-serif; color:#00E5FF; letter-spacing:0.05em; text-shadow: 0 0 15px rgba(0,229,255,0.4);">⬡ BOARD</MudText>
+        <MudText Typo="Typo.h4" Style="font-family:'Orbitron',sans-serif; color:#00E5FF; letter-spacing:0.05em; text-shadow: 0 0 15px rgba(0,229,255,0.4);">&#x2B21; BOARD</MudText>
         <MudStack Row="true" Spacing="1" AlignItems="AlignItems.Center">
             <MudTooltip Text="Table view">
                 <MudIconButton Icon="@Icons.Material.Filled.TableRows"
@@ -42,7 +42,7 @@
     @* Filter bar *@
     <MudPaper Class="pa-3" Elevation="1">
         <MudStack Row="true" Spacing="2" Wrap="Wrap.Wrap">
-            @* Project filter — always visible in both table and kanban *@
+            @* Project filter always visible in both table and kanban *@
             <MudSelect T="Guid?" @bind-Value="_filterProjectId" @bind-Value:after="OnProjectFilterChanged"
                        Label="Project" Clearable="true" Style="min-width:200px"
                        Placeholder="All Projects">
@@ -51,7 +51,7 @@
                     <MudSelectItem T="Guid?" Value="@((Guid?)project.Id)">@project.Name</MudSelectItem>
                 }
             </MudSelect>
-            @* Status filter hidden in Kanban mode (columns already show by status) — CSS only, no @if *@
+            @* Status filter hidden in Kanban mode (columns already show by status) -- CSS only, no at-if *@
             <div style="@(_isKanban ? "display:none" : "")">
                 <MudSelect T="TodoStatus?" @bind-Value="_filterStatus" @bind-Value:after="OnFilterChanged"
                            Label="Status" Clearable="true" Style="min-width:140px">
@@ -74,26 +74,64 @@
         </MudStack>
     </MudPaper>
 
+    @* Bulk-assign action bar -- always in DOM, hidden via style when nothing is selected *@
+    <MudPaper Class="pa-3" Elevation="2"
+              style="@(_selectedTodos.Count == 0 ? "display:none" : "")"
+              aria-hidden="@(_selectedTodos.Count == 0 ? "true" : "false")">
+        <MudStack Row="true" AlignItems="AlignItems.Center" Spacing="3" Wrap="Wrap.Wrap">
+            <MudText Typo="Typo.body1">
+                <strong>@_selectedTodos.Count</strong> todo@(_selectedTodos.Count == 1 ? "" : "s") selected
+            </MudText>
+            <MudSelect T="Guid?" @bind-Value="_bulkProjectId"
+                       Label="Assign to Project" Clearable="true"
+                       Style="min-width:220px"
+                       Placeholder="No Project (unassign)">
+                @foreach (var project in _projects)
+                {
+                    <MudSelectItem T="Guid?" Value="@((Guid?)project.Id)">@project.Name</MudSelectItem>
+                }
+            </MudSelect>
+            <MudButton Variant="Variant.Filled" Color="Color.Primary"
+                       StartIcon="@Icons.Material.Filled.AssignmentTurnedIn"
+                       OnClick="BulkAssignToProject"
+                       Disabled="_bulkAssigning">
+                @if (_bulkAssigning)
+                {
+                    <MudProgressCircular Size="Size.Small" Indeterminate="true" Class="mr-1" />
+                    <span>Assigning...</span>
+                }
+                else
+                {
+                    <span>Assign to Project</span>
+                }
+            </MudButton>
+            <MudButton Variant="Variant.Text" OnClick="ClearSelection">Cancel</MudButton>
+        </MudStack>
+    </MudPaper>
+
     @* Kanban view *@
     @if (_isKanban)
     {
         <KanbanBoard Todos="_kanbanTodos" OnStatusChanged="LoadKanbanData" />
         <MudText Typo="Typo.caption" Style="opacity:0.5">
-            Real-time updates via SignalR · @_kanbanTodos.Count todo(s)
+            Real-time updates via SignalR @_kanbanTodos.Count todo(s)
         </MudText>
     }
     else
     {
-        @* Todo table — server-side paging *@
+        @* Todo table -- server-side paging *@
         <MudDataGrid @ref="_grid"
                      T="Todo"
                      ServerData="LoadServerData"
+                     MultiSelection="true"
+                     @bind-SelectedItems="_selectedTodos"
                      SortMode="SortMode.Multiple"
                      Hover="true"
                      Dense="true"
                      Style="cursor:pointer"
                      RowClassFunc="@GetRowClass">
             <Columns>
+                <SelectColumn T="Todo" />
                 <PropertyColumn Property="t => t.Title" Title="Title" />
                 <TemplateColumn Title="Status">
                     <CellTemplate>
@@ -139,7 +177,7 @@
                 var first   = total == 0 ? 0 : (page - 1) * pgSize + 1;
                 var last    = Math.Min(page * pgSize, total);
                 <MudText Typo="Typo.caption" Style="opacity:0.7">
-                    Showing @first–@last of @total todo(s)
+                    Showing @first--@last of @total todo(s)
                 </MudText>
             }
         </MudStack>
@@ -161,6 +199,11 @@
 
     private List<Project> _projects = [];
 
+    // Multi-select / bulk-assign state
+    private HashSet<Todo> _selectedTodos = [];
+    private Guid?         _bulkProjectId;
+    private bool          _bulkAssigning;
+
     private HubConnection? _hub;
 
     protected override async Task OnInitializedAsync()
@@ -176,7 +219,7 @@
                 _filterProjectId = pid;
             }
 
-            // Load project list for the dropdown
+            // Load project list for the dropdowns
             _projects = await ProjectService.GetAllAsync();
 
             _hub = new HubConnectionBuilder()
@@ -228,7 +271,7 @@
         }
         catch
         {
-            // localStorage unavailable — keep default table view
+            // localStorage unavailable -- keep default table view
         }
     }
 
@@ -264,12 +307,12 @@
     private async Task LoadKanbanData()
     {
         var result = await TodoService.GetAllAsync(
-            status: null,               // all statuses — columns show by status
+            status: null,               // all statuses -- columns show by status
             priority: _filterPriority,
             assignedTo: _filterAssignedTo,
             claimedBy: null,
             page: 1,
-            pageSize: 100,              // fetch up to 100 items for the kanban
+            pageSize: 100,
             projectId: _filterProjectId);
         _kanbanTodos = result.Items;
     }
@@ -316,7 +359,7 @@
                 : "/";
             await JS.InvokeVoidAsync("history.replaceState", null, "", url);
         }
-        catch { /* JS unavailable during prerender — ignore */ }
+        catch { /* JS unavailable during prerender -- ignore */ }
     }
 
     /// <summary>
@@ -343,6 +386,50 @@
         _filterProjectId  = null;
         await UpdateQueryString();
         await OnFilterChanged();
+    }
+
+    private void ClearSelection()
+    {
+        _selectedTodos = [];
+        _bulkProjectId = null;
+    }
+
+    /// <summary>
+    /// Bulk-assigns all selected todos to the chosen project (or unassigns when project is null).
+    /// Runs all PATCH calls in parallel via Task.WhenAll, then clears selection and reloads.
+    /// </summary>
+    private async Task BulkAssignToProject()
+    {
+        if (_selectedTodos.Count == 0) return;
+
+        _bulkAssigning = true;
+        try
+        {
+            var patch = _bulkProjectId.HasValue
+                ? new PatchTodoRequest { ProjectId = _bulkProjectId }
+                : new PatchTodoRequest { ClearProjectId = true };
+
+            var tasks = _selectedTodos.Select(t => TodoService.PatchAsync(t.Id, patch)).ToList();
+            await Task.WhenAll(tasks);
+
+            var projectName = _bulkProjectId.HasValue
+                ? _projects.FirstOrDefault(p => p.Id == _bulkProjectId)?.Name ?? "project"
+                : "no project";
+
+            Snackbar.Add($"{_selectedTodos.Count} todo(s) assigned to {projectName}.", Severity.Success);
+            ClearSelection();
+
+            if (_grid is not null)
+                await _grid.ReloadServerData();
+        }
+        catch (Exception ex)
+        {
+            Snackbar.Add($"Bulk assign failed: {ex.Message}", Severity.Error);
+        }
+        finally
+        {
+            _bulkAssigning = false;
+        }
     }
 
     private async Task OpenCreateDialog()
