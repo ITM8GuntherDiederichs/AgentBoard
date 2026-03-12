@@ -237,4 +237,43 @@ public class AgentServiceTests
         Assert.Single(remaining);
         Assert.Equal("Keep Me", remaining[0].Name);
     }
+
+    // ── PatchAsync Instructions ───────────────────────────────────────────────
+
+    [Fact]
+    public async Task PatchAsync_SetsInstructions_WhenProvided()
+    {
+        var svc = BuildService();
+        var created = await svc.CreateAsync(MakeAgent());
+        var updated = await svc.PatchAsync(created.Id,
+            new AgentPatch(null, null, null, null, Instructions: "# My instructions"));
+        Assert.NotNull(updated);
+        Assert.Equal("# My instructions", updated.Instructions);
+    }
+
+    [Fact]
+    public async Task PatchAsync_ClearsInstructions_WhenClearInstructionsIsTrue()
+    {
+        var svc = BuildService();
+        var created = await svc.CreateAsync(MakeAgent());
+        await svc.PatchAsync(created.Id,
+            new AgentPatch(null, null, null, null, Instructions: "Some instructions"));
+        var updated = await svc.PatchAsync(created.Id,
+            new AgentPatch(null, null, null, null, ClearInstructions: true));
+        Assert.NotNull(updated);
+        Assert.Null(updated.Instructions);
+    }
+
+    [Fact]
+    public async Task PatchAsync_DoesNotChangeInstructions_WhenInstructionsIsNull_AndClearIsFalse()
+    {
+        var svc = BuildService();
+        var created = await svc.CreateAsync(MakeAgent());
+        await svc.PatchAsync(created.Id,
+            new AgentPatch(null, null, null, null, Instructions: "Keep this"));
+        var updated = await svc.PatchAsync(created.Id,
+            new AgentPatch(null, null, null, null));
+        Assert.NotNull(updated);
+        Assert.Equal("Keep this", updated.Instructions);
+    }
 }
