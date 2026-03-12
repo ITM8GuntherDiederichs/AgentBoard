@@ -58,10 +58,30 @@
     font-size: 0.65rem !important;
 }
 
-.event-details {
+/* ---- Assignment panel items ---- */
+.assignment-item {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    padding: 8px 6px;
+    border-bottom: 1px solid #1E2D45;
+    transition: background 0.15s ease;
+}
+
+.assignment-item:last-child {
+    border-bottom: none;
+}
+
+.assignment-item:hover {
+    background: rgba(179, 136, 255, 0.04);
+    border-radius: 4px;
+}
+
+.assignment-details {
     flex: 1;
     min-width: 0;
     display: flex;
     flex-direction: column;
     gap: 1px;
 }
+

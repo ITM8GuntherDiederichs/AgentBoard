@@ -217,6 +217,7 @@ else if (_project is not null)
         </MudGrid>
 
         @* ── 4. FEATURE REQUESTS BACKLOG ─────────────────────────────────── *@
+
         <MudPaper Class="pa-3" Style="background:#0D1220; border:1px solid #1E2D45; border-radius:8px;">
             <MudStack Row="true" AlignItems="AlignItems.Center" Justify="Justify.SpaceBetween" Class="mb-3">
                 <MudText Typo="Typo.subtitle1" Style="font-family:'Orbitron',sans-serif; color:#00E5FF; font-size:0.8rem;">
@@ -325,6 +326,209 @@ else if (_project is not null)
             }
         </MudPaper>
 
+        @* ── 5. ASSIGNMENTS ───────────────────────────────────────────────── *@
+        <MudGrid Spacing="3">
+
+            @* ── 5a. ASSIGNED TEAMS ───────────────────────────────────────── *@
+            <MudItem xs="12" md="6">
+                <MudPaper Class="pa-3" Style="background:#0D1220; border:1px solid #1E2D45; border-radius:8px; min-height:220px;">
+
+                    @* Panel header *@
+                    <MudStack Row="true" AlignItems="AlignItems.Center" Justify="Justify.SpaceBetween" Class="mb-3">
+                        <MudText Typo="Typo.subtitle1" Style="font-family:'Orbitron',sans-serif; color:#B388FF; font-size:0.8rem;">
+                            ◈ ASSIGNED TEAMS
+                        </MudText>
+                        <MudButton Variant="Variant.Outlined"
+                                   Size="Size.Small"
+                                   StartIcon="@Icons.Material.Filled.GroupAdd"
+                                   Style="border-color:#B388FF; color:#B388FF;"
+                                   OnClick="@(() => { _showAddTeamForm = !_showAddTeamForm; _selectedTeamId = Guid.Empty; StateHasChanged(); })"
+                                   aria-label="Add team to project">Add Team</MudButton>
+                    </MudStack>
+
+                    @* Add team form — always rendered, toggled with display:none to avoid MudSelect @if crash *@
+                    <div style="@(_showAddTeamForm ? "margin-bottom:12px;" : "display:none")">
+                        <MudPaper Class="pa-3" Elevation="0"
+                                  Style="background:#111827; border:1px solid #2D3748; border-radius:6px;">
+                            <MudStack Spacing="2">
+                                <MudText Typo="Typo.caption" Style="color:#B388FF; text-transform:uppercase; letter-spacing:0.05em;">Select Team to Add</MudText>
+                                <MudSelect T="Guid"
+                                           @bind-Value="_selectedTeamId"
+                                           Label="Team"
+                                           Variant="Variant.Outlined"
+                                           aria-label="Select team">
+                                    @foreach (var t in _availableTeams)
+                                    {
+                                        <MudSelectItem T="Guid" Value="@t.Id">
+                                            @t.Name
+                                            <MudText Typo="Typo.caption" Style="color:#7B8EA8; margin-left:6px;">
+                                                (@t.Members.Count @(t.Members.Count == 1 ? "member" : "members"))
+                                            </MudText>
+                                        </MudSelectItem>
+                                    }
+                                </MudSelect>
+                                <MudStack Row="true" Justify="Justify.FlexEnd" Spacing="2">
+                                    <MudButton Size="Size.Small"
+                                               OnClick="@(() => { _showAddTeamForm = false; _selectedTeamId = Guid.Empty; })">
+                                        Cancel
+                                    </MudButton>
+                                    <MudButton Size="Size.Small"
+                                               Variant="Variant.Filled"
+                                               Style="background:#B388FF; color:#0A0E1A;"
+                                               Disabled="@(_selectedTeamId == Guid.Empty || _teamsLoading)"
+                                               OnClick="AddTeamAsync"
+                                               aria-label="Confirm add team">Add</MudButton>
+                                </MudStack>
+                            </MudStack>
+                        </MudPaper>
+                    </div>
+
+                    @* Loading state *@
+                    @if (_teamsLoading)
+                    {
+                        <MudProgressLinear Indeterminate="true" Color="Color.Secondary" Class="mb-2" />
+                    }
+
+                    @* Team list *@
+                    @if (_assignedTeams.Count == 0 && !_teamsLoading)
+                    {
+                        <div style="text-align:center; padding:1.5rem; color:#4A5568;">
+                            <MudText Typo="Typo.caption">No teams assigned yet.</MudText>
+                        </div>
+                    }
+                    else
+                    {
+                        <MudStack Spacing="1">
+                            @foreach (var team in _assignedTeams)
+                            {
+                                <div class="assignment-item">
+                                    <MudIcon Icon="@Icons.Material.Filled.Groups"
+                                             Style="color:#B388FF; font-size:1.1rem; flex-shrink:0;" />
+                                    <div class="assignment-details">
+                                        <MudText Typo="Typo.body2" Style="color:#CBD5E1; font-weight:500;">@team.Name</MudText>
+                                        <MudText Typo="Typo.caption" Style="color:#7B8EA8;">
+                                            @team.Members.Count @(team.Members.Count == 1 ? "member" : "members")
+                                        </MudText>
+                                    </div>
+                                    <MudIconButton Icon="@Icons.Material.Filled.RemoveCircleOutline"
+                                                   Size="Size.Small"
+                                                   Style="color:#4A5568; margin-left:auto; flex-shrink:0;"
+                                                   OnClick="@(() => RemoveTeamAsync(team))"
+                                                   aria-label="@($"Remove team {team.Name}")" />
+                                </div>
+                            }
+                        </MudStack>
+                    }
+
+                </MudPaper>
+            </MudItem>
+
+            @* ── 5b. ASSIGNED AGENTS ──────────────────────────────────────── *@
+            <MudItem xs="12" md="6">
+                <MudPaper Class="pa-3" Style="background:#0D1220; border:1px solid #1E2D45; border-radius:8px; min-height:220px;">
+
+                    @* Panel header *@
+                    <MudStack Row="true" AlignItems="AlignItems.Center" Justify="Justify.SpaceBetween" Class="mb-3">
+                        <MudText Typo="Typo.subtitle1" Style="font-family:'Orbitron',sans-serif; color:#00E5FF; font-size:0.8rem;">
+                            ⬡ ASSIGNED AGENTS
+                        </MudText>
+                        <MudButton Variant="Variant.Outlined"
+                                   Size="Size.Small"
+                                   StartIcon="@Icons.Material.Filled.PersonAdd"
+                                   Style="border-color:#00E5FF; color:#00E5FF;"
+                                   OnClick="@(() => { _showAddAgentForm = !_showAddAgentForm; _selectedAgentId = Guid.Empty; StateHasChanged(); })"
+                                   aria-label="Add agent to project">Add Agent</MudButton>
+                    </MudStack>
+
+                    @* Add agent form — always rendered, toggled with display:none to avoid MudSelect @if crash *@
+                    <div style="@(_showAddAgentForm ? "margin-bottom:12px;" : "display:none")">
+                        <MudPaper Class="pa-3" Elevation="0"
+                                  Style="background:#111827; border:1px solid #2D3748; border-radius:6px;">
+                            <MudStack Spacing="2">
+                                <MudText Typo="Typo.caption" Style="color:#00E5FF; text-transform:uppercase; letter-spacing:0.05em;">Select Agent to Add</MudText>
+                                <MudSelect T="Guid"
+                                           @bind-Value="_selectedAgentId"
+                                           Label="Agent"
+                                           Variant="Variant.Outlined"
+                                           aria-label="Select agent">
+                                    @foreach (var a in _availableAgents)
+                                    {
+                                        <MudSelectItem T="Guid" Value="@a.Id">
+                                            @a.Name
+                                            <MudChip T="string" Size="Size.Small"
+                                                     Color="@(a.Type == AgentType.AI ? Color.Info : Color.Success)"
+                                                     Label="true"
+                                                     Style="margin-left:6px; font-size:0.6rem; height:16px;">
+                                                @a.Type.ToString()
+                                            </MudChip>
+                                        </MudSelectItem>
+                                    }
+                                </MudSelect>
+                                <MudStack Row="true" Justify="Justify.FlexEnd" Spacing="2">
+                                    <MudButton Size="Size.Small"
+                                               OnClick="@(() => { _showAddAgentForm = false; _selectedAgentId = Guid.Empty; })">
+                                        Cancel
+                                    </MudButton>
+                                    <MudButton Size="Size.Small"
+                                               Variant="Variant.Filled"
+                                               Color="Color.Primary"
+                                               Disabled="@(_selectedAgentId == Guid.Empty || _agentsLoading)"
+                                               OnClick="AddAgentAsync"
+                                               aria-label="Confirm add agent">Add</MudButton>
+                                </MudStack>
+                            </MudStack>
+                        </MudPaper>
+                    </div>
+
+                    @* Loading state *@
+                    @if (_agentsLoading)
+                    {
+                        <MudProgressLinear Indeterminate="true" Color="Color.Primary" Class="mb-2" />
+                    }
+
+                    @* Agent list *@
+                    @if (_assignedAgents.Count == 0 && !_agentsLoading)
+                    {
+                        <div style="text-align:center; padding:1.5rem; color:#4A5568;">
+                            <MudText Typo="Typo.caption">No agents directly assigned yet.</MudText>
+                        </div>
+                    }
+                    else
+                    {
+                        <MudStack Spacing="1">
+                            @foreach (var agent in _assignedAgents)
+                            {
+                                <div class="assignment-item">
+                                    <MudIcon Icon="@(agent.Type == AgentType.AI ? Icons.Material.Filled.SmartToy : Icons.Material.Filled.Person)"
+                                             Style="@($"color:{(agent.Type == AgentType.AI ? "#00E5FF" : "#4CAF50")}; font-size:1.1rem; flex-shrink:0;")" />
+                                    <div class="assignment-details">
+                                        <MudStack Row="true" AlignItems="AlignItems.Center" Spacing="1">
+                                            <MudText Typo="Typo.body2" Style="color:#CBD5E1; font-weight:500;">@agent.Name</MudText>
+                                            <MudChip T="string" Size="Size.Small"
+                                                     Color="@(agent.Type == AgentType.AI ? Color.Info : Color.Success)"
+                                                     Label="true"
+                                                     Style="font-size:0.6rem; height:16px;">@agent.Type.ToString()</MudChip>
+                                        </MudStack>
+                                        <MudText Typo="Typo.caption"
+                                                 Style="@($"color:{(agent.IsAvailable ? "#4CAF50" : "#F44336")};")">
+                                            @(agent.IsAvailable ? "● Available" : "○ Unavailable")
+                                        </MudText>
+                                    </div>
+                                    <MudIconButton Icon="@Icons.Material.Filled.RemoveCircleOutline"
+                                                   Size="Size.Small"
+                                                   Style="color:#4A5568; margin-left:auto; flex-shrink:0;"
+                                                   OnClick="@(() => RemoveAgentAsync(agent))"
+                                                   aria-label="@($"Remove agent {agent.Name}")" />
+                                </div>
+                            }
+                        </MudStack>
+                    }
+
+                </MudPaper>
+            </MudItem>
+
+        </MudGrid>
+
     </MudStack>
 }
 
@@ -348,11 +552,30 @@ else if (_project is not null)
     private bool _loading = true;
     private bool _eventsLoading;
     private bool _featuresLoading;
+    private bool _teamsLoading;
+    private bool _agentsLoading;
     private bool _hubConnected;
     private string? _initError;
     private MudDataGrid<Todo>? _grid;
     private bool _showNewFeatureForm;
     private FeatureRequest _newFeature = new();
+
+    // ── Assignment UI state ───────────────────────────────────────────────────
+    private bool _showAddTeamForm;
+    private bool _showAddAgentForm;
+    private Guid _selectedTeamId = Guid.Empty;
+    private Guid _selectedAgentId = Guid.Empty;
+
+    // ── Assignment data ───────────────────────────────────────────────────────
+    private List<Team> _allTeams = [];
+    private List<Agent> _allAgents = [];
+    private List<Guid> _assignedTeamIds = [];
+    private List<Guid> _directAssignedAgentIds = [];
+    private List<Team> _assignedTeams => _allTeams.Where(t => _assignedTeamIds.Contains(t.Id)).ToList();
+    private List<Agent> _assignedAgents => _allAgents.Where(a => _directAssignedAgentIds.Contains(a.Id)).ToList();
+    private List<Team> _availableTeams => _allTeams.Where(t => !_assignedTeamIds.Contains(t.Id)).ToList();
+    private List<Agent> _availableAgents => _allAgents.Where(a => !_directAssignedAgentIds.Contains(a.Id)).ToList();
+
 
     // ── SignalR ──────────────────────────────────────────────────────────────
     private HubConnection? _hub;
@@ -372,7 +595,11 @@ else if (_project is not null)
 
             await Task.WhenAll(
                 LoadTodoStatsAsync(),
-                LoadFeaturesAsync());
+                LoadFeaturesAsync(),
+                LoadAllTeamsAsync(),
+                LoadAllAgentsAsync(),
+                LoadAssignedTeamsAsync(),
+                LoadAssignedAgentsAsync());
         }
         catch (Exception ex)
         {
@@ -682,6 +909,171 @@ else if (_project is not null)
             }
         }
     }
+
+    // ── Assignments — Teams ───────────────────────────────────────────────────
+
+    private async Task LoadAllTeamsAsync()
+    {
+        try
+        {
+            var teams = await Http.GetFromJsonAsync<List<Team>>("api/teams");
+            _allTeams = teams ?? [];
+        }
+        catch
+        {
+            _allTeams = [];
+        }
+    }
+
+    private async Task LoadAssignedTeamsAsync()
+    {
+        _teamsLoading = true;
+        try
+        {
+            // Returns List<ProjectTeamEntry> { TeamId, AssignedAt }
+            var entries = await Http.GetFromJsonAsync<List<ProjectTeamEntryDto>>(
+                $"api/projects/{ProjectId}/teams");
+            _assignedTeamIds = entries?.Select(e => e.TeamId).ToList() ?? [];
+        }
+        catch
+        {
+            _assignedTeamIds = [];
+        }
+        finally
+        {
+            _teamsLoading = false;
+        }
+    }
+
+    private async Task AddTeamAsync()
+    {
+        if (_selectedTeamId == Guid.Empty) return;
+        _teamsLoading = true;
+        try
+        {
+            var resp = await Http.PostAsync($"api/projects/{ProjectId}/teams/{_selectedTeamId}", null);
+            resp.EnsureSuccessStatusCode();
+            Snackbar.Add("Team assigned to project", Severity.Success);
+            _showAddTeamForm = false;
+            _selectedTeamId = Guid.Empty;
+            await LoadAssignedTeamsAsync();
+        }
+        catch (Exception ex)
+        {
+            Snackbar.Add($"Error assigning team: {ex.Message}", Severity.Error);
+        }
+        finally
+        {
+            _teamsLoading = false;
+        }
+    }
+
+    private async Task RemoveTeamAsync(Team team)
+    {
+        _teamsLoading = true;
+        try
+        {
+            var resp = await Http.DeleteAsync($"api/projects/{ProjectId}/teams/{team.Id}");
+            resp.EnsureSuccessStatusCode();
+            Snackbar.Add($"Team \"{team.Name}\" removed from project", Severity.Success);
+            await LoadAssignedTeamsAsync();
+        }
+        catch (Exception ex)
+        {
+            Snackbar.Add($"Error removing team: {ex.Message}", Severity.Error);
+        }
+        finally
+        {
+            _teamsLoading = false;
+        }
+    }
+
+    // ── Assignments — Agents ──────────────────────────────────────────────────
+
+    private async Task LoadAllAgentsAsync()
+    {
+        try
+        {
+            var agents = await Http.GetFromJsonAsync<List<Agent>>("api/agents");
+            _allAgents = agents ?? [];
+        }
+        catch
+        {
+            _allAgents = [];
+        }
+    }
+
+    private async Task LoadAssignedAgentsAsync()
+    {
+        _agentsLoading = true;
+        try
+        {
+            // Returns List<ProjectAgentEntry> { AgentId, AssignedAt, Source }
+            // We only show direct assignments in this panel (source == "direct")
+            var entries = await Http.GetFromJsonAsync<List<ProjectAgentEntryDto>>(
+                $"api/projects/{ProjectId}/agents");
+            _directAssignedAgentIds = entries?
+                .Where(e => e.Source == "direct")
+                .Select(e => e.AgentId)
+                .ToList() ?? [];
+        }
+        catch
+        {
+            _directAssignedAgentIds = [];
+        }
+        finally
+        {
+            _agentsLoading = false;
+        }
+    }
+
+    private async Task AddAgentAsync()
+    {
+        if (_selectedAgentId == Guid.Empty) return;
+        _agentsLoading = true;
+        try
+        {
+            var resp = await Http.PostAsync($"api/projects/{ProjectId}/agents/{_selectedAgentId}", null);
+            resp.EnsureSuccessStatusCode();
+            Snackbar.Add("Agent assigned to project", Severity.Success);
+            _showAddAgentForm = false;
+            _selectedAgentId = Guid.Empty;
+            await LoadAssignedAgentsAsync();
+        }
+        catch (Exception ex)
+        {
+            Snackbar.Add($"Error assigning agent: {ex.Message}", Severity.Error);
+        }
+        finally
+        {
+            _agentsLoading = false;
+        }
+    }
+
+    private async Task RemoveAgentAsync(Agent agent)
+    {
+        _agentsLoading = true;
+        try
+        {
+            var resp = await Http.DeleteAsync($"api/projects/{ProjectId}/agents/{agent.Id}");
+            resp.EnsureSuccessStatusCode();
+            Snackbar.Add($"Agent \"{agent.Name}\" removed from project", Severity.Success);
+            await LoadAssignedAgentsAsync();
+        }
+        catch (Exception ex)
+        {
+            Snackbar.Add($"Error removing agent: {ex.Message}", Severity.Error);
+        }
+        finally
+        {
+            _agentsLoading = false;
+        }
+    }
+
+    // ── DTO records for assignment API responses ───────────────────────────────
+
+    private sealed record ProjectTeamEntryDto(Guid TeamId, DateTime AssignedAt);
+    private sealed record ProjectAgentEntryDto(Guid AgentId, DateTime AssignedAt, string Source);
 
     // ── Helpers ──────────────────────────────────────────────────────────────
     private static Color GetEventColor(string eventType) => eventType.ToLower() switch
