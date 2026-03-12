@@ -1,6 +1,7 @@
 @page "/teams"
 @rendermode @(new InteractiveServerRenderMode(prerender: false))
 @using AgentBoard.Data.Models
+@using AgentBoard.Contracts
 @inject HttpClient Http
 @inject IDialogService DialogService
 @inject ISnackbar Snackbar
@@ -69,8 +70,8 @@
                          tabindex="0"
                          aria-expanded="@isExpanded.ToString().ToLower()"
                          aria-label="@($"Toggle members for {team.Name}")"
-                         @onclick="@(() => ToggleExpand(team.Id))"
-                         @onkeydown="@((e) => { if (e.Key == "Enter" || e.Key == " ") ToggleExpand(team.Id); })">
+                         @onclick="@(() => ToggleExpandAsync(team.Id))"
+                         @onkeydown="@(async (e) => { if (e.Key == "Enter" || e.Key == " ") await ToggleExpandAsync(team.Id); })">
                         <div class="team-card-title-row">
                             <span class="team-name">@team.Name</span>
                             <div style="display:flex; align-items:center; gap:0.5rem;">
@@ -149,6 +150,81 @@
                                 }
                             </div>
                         }
+
+                        <!-- ── Skills Section ─────────────────────────────────── -->
+                        <div class="team-skills-section">
+                            <div class="team-members-header" style="margin-top:0.875rem;">
+                                <MudText Typo="Typo.subtitle2" class="skills-section-header">⚡ SKILLS</MudText>
+                                <MudButton Variant="Variant.Text"
+                                           Size="Size.Small"
+                                           StartIcon="@Icons.Material.Filled.Add"
+                                           Style="color:#B388FF;"
+                                           aria-label="Add skill to team"
+                                           OnClick="@(() => ToggleAddSkill(team.Id))">Add Skill</MudButton>
+                            </div>
+
+                            @if (_teamSkillsLoaded.Contains(team.Id))
+                            {
+                                @if (_teamSkills.TryGetValue(team.Id, out var teamSkillList) && teamSkillList.Count > 0)
+                                {
+                                    <div class="skill-chips">
+                                        @foreach (var skill in teamSkillList)
+                                        {
+                                            var skillRef = skill;
+                                            <div class="skill-chip-row">
+                                                <MudChip T="string"
+                                                         Size="Size.Small"
+                                                         Style="background:rgba(0,229,255,0.08); color:#00E5FF; border:1px solid rgba(0,229,255,0.25); font-size:0.78rem;"
+                                                         Variant="Variant.Outlined"
+                                                         Icon="@Icons.Material.Filled.Psychology">@skillRef.Name</MudChip>
+                                                <MudTooltip Text="Remove skill">
+                                                    <MudIconButton Icon="@Icons.Material.Filled.Close"
+                                                                   Size="Size.Small"
+                                                                   Style="color:#EF5350;"
+                                                                   aria-label="@($"Remove skill {skillRef.Name} from team")"
+                                                                   OnClick="@(() => RemoveSkillAsync(team, skillRef.Id))" />
+                                                </MudTooltip>
+                                            </div>
+                                        }
+                                    </div>
+                                }
+                                else
+                                {
+                                    <MudText Typo="Typo.caption" Style="color:#4A5568; font-style:italic;">No skills assigned yet.</MudText>
+                                }
+                            }
+                            else
+                            {
+                                <MudText Typo="Typo.caption" Style="color:#4A5568; font-style:italic;">Loading skills…</MudText>
+                            }
+
+                            <!-- Add-skill form — MudSelect ALWAYS rendered, display:none hides it (MudBlazor v9 rule) -->
+                            <div style="display:@(_addSkillTeamId == team.Id ? "flex" : "none"); align-items:center; gap:0.5rem; margin-top:0.625rem; flex-wrap:wrap;">
+                                <MudSelect T="Guid"
+                                           @bind-Value="_selectedSkillId"
+                                           Label="Select Skill"
+                                           Variant="Variant.Outlined"
+                                           Dense="true"
+                                           Style="min-width:180px; max-width:260px;"
+                                           aria-label="Select skill to add to team">
+                                    @foreach (var sk in GetAvailableSkills(team.Id))
+                                    {
+                                        <MudSelectItem T="Guid" Value="@sk.Id">@sk.Name</MudSelectItem>
+                                    }
+                                </MudSelect>
+                                <MudButton Variant="Variant.Filled"
+                                           Color="Color.Primary"
+                                           Size="Size.Small"
+                                           Disabled="@(_selectedSkillId == Guid.Empty)"
+                                           aria-label="Confirm add skill"
+                                           OnClick="@(() => AddSkillAsync(team))">Add</MudButton>
+                                <MudButton Variant="Variant.Text"
+                                           Size="Size.Small"
+                                           Style="color:#7B8EA8;"
+                                           aria-label="Cancel add skill"
+                                           OnClick="CancelAddSkill">Cancel</MudButton>
+                            </div>
+                        </div>
                     </div>
                 </div>
             }
@@ -159,6 +235,11 @@
 @code {
     private List<Team> _teams = [];
     private List<Agent> _agents = [];
+    private List<Skill> _allSkills = [];
+    private Dictionary<Guid, List<Skill>> _teamSkills = new();
+    private HashSet<Guid> _teamSkillsLoaded = new();
+    private Guid? _addSkillTeamId;
+    private Guid _selectedSkillId = Guid.Empty;
     private bool _loading = true;
     private string? _initError;
     private Guid? _expandedTeamId;
@@ -167,7 +248,7 @@
     {
         try
         {
-            await Task.WhenAll(LoadTeamsAsync(), LoadAgentsAsync());
+            await Task.WhenAll(LoadTeamsAsync(), LoadAgentsAsync(), LoadAllSkillsAsync());
         }
         catch (Exception ex)
         {
@@ -207,9 +288,58 @@
         }
     }
 
-    private void ToggleExpand(Guid teamId)
+    private async Task LoadAllSkillsAsync()
     {
-        _expandedTeamId = _expandedTeamId == teamId ? null : teamId;
+        try
+        {
+            var skills = await Http.GetFromJsonAsync<List<Skill>>("api/skills");
+            _allSkills = skills ?? [];
+        }
+        catch
+        {
+            _allSkills = [];
+        }
+    }
+
+    private async Task LoadTeamSkillsAsync(Guid teamId)
+    {
+        try
+        {
+            var skills = await Http.GetFromJsonAsync<List<Skill>>($"api/teams/{teamId}/skills");
+            _teamSkills[teamId] = skills ?? [];
+        }
+        catch
+        {
+            _teamSkills[teamId] = [];
+        }
+        finally
+        {
+            _teamSkillsLoaded.Add(teamId);
+        }
+    }
+
+    private IEnumerable<Skill> GetAvailableSkills(Guid teamId)
+    {
+        var assigned = _teamSkills.TryGetValue(teamId, out var ts)
+            ? ts.Select(s => s.Id).ToHashSet()
+            : new HashSet<Guid>();
+        return _allSkills.Where(s => !assigned.Contains(s.Id));
+    }
+
+    private async Task ToggleExpandAsync(Guid teamId)
+    {
+        if (_expandedTeamId == teamId)
+        {
+            _expandedTeamId = null;
+            CancelAddSkill();
+        }
+        else
+        {
+            _expandedTeamId = teamId;
+            CancelAddSkill();
+            if (!_teamSkillsLoaded.Contains(teamId))
+                await LoadTeamSkillsAsync(teamId);
+        }
     }
 
     private string GetAgentName(Guid agentId)
@@ -217,6 +347,64 @@
         var agent = _agents.FirstOrDefault(a => a.Id == agentId);
         return agent?.Name ?? agentId.ToString()[..8] + "…";
     }
+
+    // ── Skills helpers ──────────────────────────────────────────────────────────
+
+    private void ToggleAddSkill(Guid teamId)
+    {
+        if (_addSkillTeamId == teamId)
+            CancelAddSkill();
+        else
+        {
+            _addSkillTeamId = teamId;
+            _selectedSkillId = Guid.Empty;
+        }
+    }
+
+    private void CancelAddSkill()
+    {
+        _addSkillTeamId = null;
+        _selectedSkillId = Guid.Empty;
+    }
+
+    private async Task AddSkillAsync(Team team)
+    {
+        if (_selectedSkillId == Guid.Empty || _addSkillTeamId != team.Id) return;
+        try
+        {
+            var response = await Http.PostAsJsonAsync($"api/teams/{team.Id}/skills",
+                new { skillId = _selectedSkillId });
+            response.EnsureSuccessStatusCode();
+            var skillName = _allSkills.FirstOrDefault(s => s.Id == _selectedSkillId)?.Name ?? "Skill";
+            Snackbar.Add($"Skill \"{skillName}\" added to team", Severity.Success);
+            CancelAddSkill();
+            await LoadTeamSkillsAsync(team.Id);
+        }
+        catch (Exception ex)
+        {
+            Snackbar.Add($"Error adding skill: {ex.Message}", Severity.Error);
+        }
+    }
+
+    private async Task RemoveSkillAsync(Team team, Guid skillId)
+    {
+        var skillName = (_teamSkills.TryGetValue(team.Id, out var ts)
+            ? ts.FirstOrDefault(s => s.Id == skillId)?.Name
+            : null) ?? "Skill";
+        try
+        {
+            var response = await Http.DeleteAsync($"api/teams/{team.Id}/skills/{skillId}");
+            response.EnsureSuccessStatusCode();
+            Snackbar.Add($"Skill \"{skillName}\" removed from team", Severity.Success);
+            await LoadTeamSkillsAsync(team.Id);
+        }
+        catch (Exception ex)
+        {
+            Snackbar.Add($"Error removing skill: {ex.Message}", Severity.Error);
+        }
+    }
+
+    // ── Team CRUD ───────────────────────────────────────────────────────────────
 
     private async Task OpenCreateDialog()
     {
@@ -245,11 +433,12 @@
     {
         var model = new Team
         {
-            Id          = team.Id,
-            Name        = team.Name,
-            Description = team.Description,
-            CreatedAt   = team.CreatedAt,
-            UpdatedAt   = team.UpdatedAt
+            Id           = team.Id,
+            Name         = team.Name,
+            Description  = team.Description,
+            Instructions = team.Instructions,
+            CreatedAt    = team.CreatedAt,
+            UpdatedAt    = team.UpdatedAt
         };
 
         var parameters = new DialogParameters<TeamDialog> { { x => x.Model, model } };
@@ -260,7 +449,12 @@
         {
             try
             {
-                var response = await Http.PutAsJsonAsync($"api/teams/{updated.Id}", updated);
+                var patch = new TeamPatch(
+                    updated.Name,
+                    updated.Description,
+                    updated.Instructions,
+                    ClearInstructions: string.IsNullOrEmpty(updated.Instructions));
+                var response = await Http.PatchAsJsonAsync($"api/teams/{updated.Id}", patch);
                 response.EnsureSuccessStatusCode();
                 Snackbar.Add("Team updated", Severity.Success);
                 await LoadTeamsAsync();
