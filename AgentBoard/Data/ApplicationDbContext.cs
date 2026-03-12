@@ -17,6 +17,7 @@ public class ApplicationDbContext(DbContextOptions<ApplicationDbContext> options
     public DbSet<Skill> Skills => Set<Skill>();
     public DbSet<AgentSkill> AgentSkills => Set<AgentSkill>();
     public DbSet<TeamSkill> TeamSkills => Set<TeamSkill>();
+    public DbSet<SkillFile> SkillFiles => Set<SkillFile>();
 
     protected override void OnModelCreating(ModelBuilder modelBuilder)
     {
@@ -102,6 +103,12 @@ public class ApplicationDbContext(DbContextOptions<ApplicationDbContext> options
             e.HasKey(ts => new { ts.TeamId, ts.SkillId });
             e.HasIndex(ts => ts.SkillId);
             // No FK constraints - loose coupling pattern
+        });
+
+        modelBuilder.Entity<SkillFile>(e =>
+        {
+            e.HasIndex(sf => sf.SkillId);
+            // No FK constraint to Skills table - plain Guid reference (loose coupling pattern)
         });
     }
 
