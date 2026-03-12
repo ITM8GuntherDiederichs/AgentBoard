@@ -75,6 +75,8 @@ public class AgentService(IDbContextFactory<ApplicationDbContext> factory)
         if (patch.Description is not null) agent.Description = patch.Description;
         if (patch.Type.HasValue) agent.Type = patch.Type.Value;
         if (patch.IsAvailable.HasValue) agent.IsAvailable = patch.IsAvailable.Value;
+        if (patch.ClearInstructions) agent.Instructions = null;
+        else if (patch.Instructions is not null) agent.Instructions = patch.Instructions;
         agent.UpdatedAt = DateTime.UtcNow;
 
         await db.SaveChangesAsync();

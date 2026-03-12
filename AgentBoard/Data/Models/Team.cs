@@ -18,6 +18,9 @@ public class Team
     /// <summary>UTC timestamp when this team was last updated.</summary>
     public DateTime UpdatedAt { get; set; }
 
+    /// <summary>Optional system prompt / instructions for this team (markdown).</summary>
+    public string? Instructions { get; set; }
+
     /// <summary>Members of this team.</summary>
     public ICollection<TeamMember> Members { get; set; } = new List<TeamMember>();
 }

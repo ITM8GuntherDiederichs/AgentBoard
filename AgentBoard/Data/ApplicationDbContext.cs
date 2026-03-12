@@ -14,6 +14,9 @@ public class ApplicationDbContext(DbContextOptions<ApplicationDbContext> options
     public DbSet<TeamMember> TeamMembers => Set<TeamMember>();
     public DbSet<ProjectAgent> ProjectAgents => Set<ProjectAgent>();
     public DbSet<ProjectTeam> ProjectTeams => Set<ProjectTeam>();
+    public DbSet<Skill> Skills => Set<Skill>();
+    public DbSet<AgentSkill> AgentSkills => Set<AgentSkill>();
+    public DbSet<TeamSkill> TeamSkills => Set<TeamSkill>();
 
     protected override void OnModelCreating(ModelBuilder modelBuilder)
     {
@@ -79,6 +82,26 @@ public class ApplicationDbContext(DbContextOptions<ApplicationDbContext> options
             e.HasKey(pt => new { pt.ProjectId, pt.TeamId });
             e.HasIndex(pt => pt.TeamId);
             // No FK constraint to Teams table - loose coupling pattern
+        });
+
+        modelBuilder.Entity<Skill>(e =>
+        {
+            e.Property(s => s.Name).IsRequired().HasMaxLength(200);
+            e.HasIndex(s => s.Name);
+        });
+
+        modelBuilder.Entity<AgentSkill>(e =>
+        {
+            e.HasKey(a => new { a.AgentId, a.SkillId });
+            e.HasIndex(a => a.SkillId);
+            // No FK constraints - loose coupling pattern
+        });
+
+        modelBuilder.Entity<TeamSkill>(e =>
+        {
+            e.HasKey(ts => new { ts.TeamId, ts.SkillId });
+            e.HasIndex(ts => ts.SkillId);
+            // No FK constraints - loose coupling pattern
         });
     }
 
