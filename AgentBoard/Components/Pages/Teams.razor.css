@@ -125,3 +125,32 @@
     justify-content: space-between;
     padding: 0.125rem 0;
 }
+
+/* ─── Skills Section ─────────────────────────────────────────── */
+.team-skills-section {
+    border-top: 1px solid #1A2640;
+    padding-top: 0.75rem;
+    margin-top: 0.5rem;
+}
+
+.skills-section-header {
+    color: #B388FF !important;
+    text-transform: uppercase;
+    letter-spacing: 0.1em;
+    font-size: 0.75rem;
+    text-shadow: 0 0 8px rgba(179, 136, 255, 0.3);
+}
+
+.skill-chips {
+    display: flex;
+    flex-direction: column;
+    gap: 0.375rem;
+    margin-top: 0.375rem;
+}
+
+.skill-chip-row {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    padding: 0.125rem 0;
+}
