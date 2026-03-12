@@ -131,6 +131,8 @@ ipch/
 # Allow our E2E test project
 !AgentBoard.E2E/
 !AgentBoard.E2E/**
+AgentBoard.E2E/bin/
+AgentBoard.E2E/obj/
 
 # TFS 2012 Local Workspace
 $tf/
