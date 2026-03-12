@@ -1,0 +1,73 @@
+@using AgentBoard.Data.Models
+
+<MudDialog>
+    <DialogContent>
+        <MudStack Spacing="3" Class="pt-1">
+            @if (_loading)
+            {
+                <MudProgressLinear Indeterminate="true" Color="Color.Primary" />
+            }
+            else if (_agents.Count == 0)
+            {
+                <MudText Style="color:#7B8EA8;">No available agents found.</MudText>
+            }
+            else
+            {
+                <MudText Typo="Typo.body2" Style="color:#A0AEC0;">Select an agent to add to the team:</MudText>
+                <div style="max-height:320px; overflow-y:auto; display:flex; flex-direction:column; gap:0.5rem;">
+                    @foreach (var agent in _agents)
+                    {
+                        var isAlreadyMember = ExistingMemberIds.Contains(agent.Id);
+                        <div style="display:flex; align-items:center; justify-content:space-between; padding:0.5rem 0.75rem; border:1px solid @(isAlreadyMember ? "#1E2D45" : (_selected == agent.Id ? "#00E5FF" : "#1E2D45")); border-radius:6px; background:@(isAlreadyMember ? "#080C14" : "#0D1220"); opacity:@(isAlreadyMember ? "0.5" : "1"); cursor:@(isAlreadyMember ? "default" : "pointer");"
+                             @onclick="@(() => { if (!isAlreadyMember) _selected = agent.Id; })">
+                            <div>
+                                <MudText Typo="Typo.body1" Style="@($"color:{(isAlreadyMember ? "#4A5568" : "#E0E6F0")}")">@agent.Name</MudText>
+                                @if (!string.IsNullOrWhiteSpace(agent.Description))
+                                {
+                                    <MudText Typo="Typo.caption" Style="color:#7B8EA8;">@agent.Description</MudText>
+                                }
+                            </div>
+                            <div style="display:flex; align-items:center; gap:0.5rem;">
+                                @if (isAlreadyMember)
+                                {
+                                    <MudChip T="string" Size="Size.Small" Color="Color.Default" Variant="Variant.Outlined">Already member</MudChip>
+                                }
+                                else if (_selected == agent.Id)
+                                {
+                                    <MudIcon Icon="@Icons.Material.Filled.CheckCircle" Style="color:#00E5FF;" Size="Size.Small" />
+                                }
+                            </div>
+                        </div>
+                    }
+                </div>
+            }
+        </MudStack>
+    </DialogContent>
+    <DialogActions>
+        <MudButton OnClick="Cancel" aria-label="Cancel">Cancel</MudButton>
+        <MudButton Color="Color.Primary"
+                   Variant="Variant.Filled"
+                   OnClick="Submit"
+                   Disabled="@(_selected == Guid.Empty)"
+                   aria-label="Add selected agent">Add</MudButton>
+    </DialogActions>
+</MudDialog>
+
+@code {
+    [CascadingParameter] IMudDialogInstance MudDialog { get; set; } = default!;
+
+    [Parameter] public List<Agent> Agents { get; set; } = [];
+    [Parameter] public HashSet<Guid> ExistingMemberIds { get; set; } = [];
+
+    private List<Agent> _agents = [];
+    private Guid _selected = Guid.Empty;
+    private bool _loading = false;
+
+    protected override void OnParametersSet()
+    {
+        _agents = Agents;
+    }
+
+    void Submit() => MudDialog.Close(DialogResult.Ok(_selected));
+    void Cancel() => MudDialog.Cancel();
+}
