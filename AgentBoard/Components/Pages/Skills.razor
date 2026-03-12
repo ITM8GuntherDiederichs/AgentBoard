@@ -1,0 +1,221 @@
+@page "/skills"
+@rendermode @(new InteractiveServerRenderMode(prerender: false))
+@using AgentBoard.Data.Models
+@using AgentBoard.Contracts
+@inject HttpClient Http
+@inject IDialogService DialogService
+@inject ISnackbar Snackbar
+
+<PageTitle>Skills — AgentBoard</PageTitle>
+
+@if (_initError is not null)
+{
+    <MudAlert Severity="Severity.Error" Class="mb-4">Failed to load skills: @_initError</MudAlert>
+}
+
+<MudStack Spacing="3">
+    <MudStack Row="true" AlignItems="AlignItems.Center" Justify="Justify.SpaceBetween">
+        <MudText Typo="Typo.h4" Style="font-family:'Orbitron',sans-serif; color:#00E5FF; letter-spacing:0.05em; text-shadow: 0 0 15px rgba(0,229,255,0.4);">
+            ⬡ SKILLS
+        </MudText>
+        <MudButton Variant="Variant.Filled"
+                   Color="Color.Primary"
+                   StartIcon="@Icons.Material.Filled.Add"
+                   aria-label="Create new skill"
+                   OnClick="OpenCreateDialog">New Skill</MudButton>
+    </MudStack>
+
+    @if (_loading)
+    {
+        <div class="skills-grid">
+            @for (int i = 0; i < 6; i++)
+            {
+                <div class="skill-card-skeleton">
+                    <MudSkeleton Animation="Animation.Wave" Height="24px" Width="60%" />
+                    <MudSkeleton Animation="Animation.Wave" Height="16px" Class="mt-3" />
+                    <MudSkeleton Animation="Animation.Wave" Height="16px" Width="80%" Class="mt-1" />
+                    <MudSkeleton Animation="Animation.Wave" Height="16px" Width="50%" Class="mt-1" />
+                </div>
+            }
+        </div>
+    }
+    else if (_skills.Count == 0 && _initError is null)
+    {
+        <MudPaper Class="pa-8" Elevation="0"
+                  Style="background:#0D1220; border:1px solid #1E2D45; border-radius:8px; text-align:center;">
+            <MudIcon Icon="@Icons.Material.Filled.Psychology"
+                     Style="font-size:4rem; color:#1E2D45; display:block; margin:0 auto 1rem;" />
+            <MudText Typo="Typo.h6" Style="color:#7B8EA8;">No skills yet</MudText>
+            <MudText Style="color:#4A5568; margin-top:0.5rem;">
+                Create your first skill to define reusable agent capabilities.
+            </MudText>
+            <MudButton Variant="Variant.Filled"
+                       Color="Color.Primary"
+                       Class="mt-4"
+                       StartIcon="@Icons.Material.Filled.Add"
+                       OnClick="OpenCreateDialog">New Skill</MudButton>
+        </MudPaper>
+    }
+    else
+    {
+        <div class="skills-grid">
+            @foreach (var skill in _skills)
+            {
+                <div class="skill-card">
+                    <div class="skill-card-header">
+                        <span class="skill-name">@skill.Name</span>
+                        <div class="skill-card-actions">
+                            <MudTooltip Text="Edit skill">
+                                <MudIconButton Icon="@Icons.Material.Filled.Edit"
+                                               Size="Size.Small"
+                                               Style="color:#00E5FF"
+                                               aria-label="@($"Edit {skill.Name}")"
+                                               OnClick="@(() => OpenEditDialog(skill))" />
+                            </MudTooltip>
+                            <MudTooltip Text="Delete skill">
+                                <MudIconButton Icon="@Icons.Material.Filled.Delete"
+                                               Size="Size.Small"
+                                               Color="Color.Error"
+                                               aria-label="@($"Delete {skill.Name}")"
+                                               OnClick="@(() => DeleteSkill(skill))" />
+                            </MudTooltip>
+                        </div>
+                    </div>
+
+                    @if (!string.IsNullOrWhiteSpace(skill.Content))
+                    {
+                        <p class="skill-content-preview">@Truncate(skill.Content, 150)</p>
+                    }
+                    else
+                    {
+                        <p class="skill-content-preview no-content">No content defined</p>
+                    }
+                </div>
+            }
+        </div>
+    }
+</MudStack>
+
+@code {
+    private List<Skill> _skills = [];
+    private bool _loading = true;
+    private string? _initError;
+
+    protected override async Task OnInitializedAsync()
+    {
+        try
+        {
+            await LoadSkillsAsync();
+        }
+        catch (Exception ex)
+        {
+            _initError = ex.Message;
+            _loading = false;
+        }
+    }
+
+    private async Task LoadSkillsAsync()
+    {
+        _loading = true;
+        try
+        {
+            var skills = await Http.GetFromJsonAsync<List<Skill>>("api/skills");
+            _skills = skills ?? [];
+        }
+        catch (Exception ex)
+        {
+            _initError = ex.Message;
+        }
+        finally
+        {
+            _loading = false;
+        }
+    }
+
+    private async Task OpenCreateDialog()
+    {
+        var model = new Skill();
+        var parameters = new DialogParameters<SkillDialog> { { x => x.Model, model } };
+        var dialog = await DialogService.ShowAsync<SkillDialog>("New Skill", parameters);
+        var result = await dialog.Result;
+
+        if (result is { Canceled: false, Data: Skill created })
+        {
+            try
+            {
+                var response = await Http.PostAsJsonAsync("api/skills", created);
+                response.EnsureSuccessStatusCode();
+                Snackbar.Add("Skill created", Severity.Success);
+                await LoadSkillsAsync();
+            }
+            catch (Exception ex)
+            {
+                Snackbar.Add($"Error creating skill: {ex.Message}", Severity.Error);
+            }
+        }
+    }
+
+    private async Task OpenEditDialog(Skill skill)
+    {
+        var model = new Skill
+        {
+            Id        = skill.Id,
+            Name      = skill.Name,
+            Content   = skill.Content,
+            CreatedAt = skill.CreatedAt,
+            UpdatedAt = skill.UpdatedAt
+        };
+
+        var parameters = new DialogParameters<SkillDialog> { { x => x.Model, model } };
+        var dialog = await DialogService.ShowAsync<SkillDialog>("Edit Skill", parameters);
+        var result = await dialog.Result;
+
+        if (result is { Canceled: false, Data: Skill updated })
+        {
+            try
+            {
+                var patch = new SkillPatch(updated.Name, updated.Content);
+                var response = await Http.PatchAsJsonAsync($"api/skills/{updated.Id}", patch);
+                response.EnsureSuccessStatusCode();
+                Snackbar.Add("Skill updated", Severity.Success);
+                await LoadSkillsAsync();
+            }
+            catch (Exception ex)
+            {
+                Snackbar.Add($"Error updating skill: {ex.Message}", Severity.Error);
+            }
+        }
+    }
+
+    private async Task DeleteSkill(Skill skill)
+    {
+        var parameters = new DialogParameters<ConfirmDialog>
+        {
+            { x => x.ContentText, $"Delete \"{skill.Name}\"? This cannot be undone." },
+            { x => x.ButtonText,  "Delete" }
+        };
+        var dialog = await DialogService.ShowAsync<ConfirmDialog>("Confirm Delete", parameters);
+        var result = await dialog.Result;
+
+        if (result is { Canceled: false })
+        {
+            try
+            {
+                var response = await Http.DeleteAsync($"api/skills/{skill.Id}");
+                response.EnsureSuccessStatusCode();
+                Snackbar.Add("Skill deleted", Severity.Success);
+                await LoadSkillsAsync();
+            }
+            catch (Exception ex)
+            {
+                Snackbar.Add($"Error deleting skill: {ex.Message}", Severity.Error);
+            }
+        }
+    }
+
+    private static string Truncate(string? text, int maxLength)
+    {
+        if (string.IsNullOrEmpty(text)) return "";
+        return text.Length <= maxLength ? text : text[..maxLength] + "…";
+    }
+}
