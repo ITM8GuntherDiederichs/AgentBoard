@@ -1,0 +1,80 @@
+@using AgentBoard.Contracts
+@using AgentBoard.Data.Models
+@using AgentBoard.Services
+@inject HttpClient Http
+@inject ISnackbar Snackbar
+
+<MudDialog>
+    <DialogContent>
+        <MudForm @ref="_form" @bind-IsValid="_isValid">
+            <MudStack Spacing="3" Class="pt-1">
+                <MudTextField @bind-Value="Model.Title"
+                              Label="Title"
+                              Required="true"
+                              RequiredError="Title is required"
+                              MaxLength="200"
+                              Counter="200"
+                              Variant="Variant.Outlined"
+                              aria-label="Todo title" />
+                <MudTextField @bind-Value="Model.Description"
+                              Label="Description"
+                              Lines="3"
+                              MaxLength="2000"
+                              Variant="Variant.Outlined"
+                              aria-label="Todo description" />
+                <MudSelect T="TodoPriority" @bind-Value="Model.Priority"
+                           Label="Priority"
+                           Variant="Variant.Outlined">
+                    @foreach (var p in Enum.GetValues<TodoPriority>())
+                    {
+                        <MudSelectItem T="TodoPriority" Value="@p">@p.ToString()</MudSelectItem>
+                    }
+                </MudSelect>
+                <MudTextField @bind-Value="Model.AssignedTo"
+                              Label="Assigned To (agent ID)"
+                              MaxLength="100"
+                              Variant="Variant.Outlined"
+                              aria-label="Assigned to" />
+            </MudStack>
+        </MudForm>
+    </DialogContent>
+    <DialogActions>
+        <MudButton OnClick="Cancel" aria-label="Cancel">Cancel</MudButton>
+        <MudButton Color="Color.Primary" Variant="Variant.Filled"
+                   Disabled="@(!_isValid)"
+                   OnClick="Submit"
+                   aria-label="Create todo">Create</MudButton>
+    </DialogActions>
+</MudDialog>
+
+@code {
+    [CascadingParameter] IMudDialogInstance MudDialog { get; set; } = default!;
+
+    [Parameter, EditorRequired] public CreateTodoRequest Model { get; set; } = default!;
+
+    /// <summary>Pre-filled ProjectId for the new todo.</summary>
+    [Parameter] public Guid? ProjectId { get; set; }
+
+    private MudForm _form = default!;
+    private bool _isValid;
+
+    private async Task Submit()
+    {
+        await _form.ValidateAsync();
+        if (!_isValid) return;
+
+        try
+        {
+            Model.ProjectId = ProjectId;
+            var resp = await Http.PostAsJsonAsync("api/todos", Model);
+            resp.EnsureSuccessStatusCode();
+            MudDialog.Close(DialogResult.Ok(true));
+        }
+        catch (Exception ex)
+        {
+            Snackbar.Add($"Error creating todo: {ex.Message}", Severity.Error);
+        }
+    }
+
+    private void Cancel() => MudDialog.Cancel();
+}

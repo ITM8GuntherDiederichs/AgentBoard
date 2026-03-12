@@ -1,0 +1,718 @@
+@page "/projects/{ProjectId:guid}"
+@rendermode @(new InteractiveServerRenderMode(prerender: false))
+@using AgentBoard.Contracts
+@using AgentBoard.Data.Models
+@using Microsoft.AspNetCore.SignalR.Client
+@inject HttpClient Http
+@inject IJSRuntime JS
+@inject ISnackbar Snackbar
+@inject IDialogService DialogService
+@inject NavigationManager Nav
+@implements IAsyncDisposable
+
+<PageTitle>@(_project?.Name ?? "Project") — AgentBoard</PageTitle>
+
+@if (_initError is not null)
+{
+    <MudAlert Severity="Severity.Error" Class="mb-4">Failed to load project: @_initError</MudAlert>
+}
+
+@if (_loading)
+{
+    <MudStack Spacing="4">
+        <MudSkeleton Animation="Animation.Wave" Height="40px" Width="40%" />
+        <MudSkeleton Animation="Animation.Wave" Height="20px" />
+        <MudSkeleton Animation="Animation.Wave" Height="20px" Width="70%" />
+        <MudGrid>
+            @for (int i = 0; i < 4; i++)
+            {
+                <MudItem xs="12" sm="6" md="3">
+                    <MudPaper Class="pa-4" Style="background:#0D1220; border:1px solid #1E2D45; border-radius:8px; height:100px;">
+                        <MudSkeleton Animation="Animation.Wave" Height="16px" Width="60%" />
+                        <MudSkeleton Animation="Animation.Wave" Height="36px" Width="40%" Class="mt-2" />
+                    </MudPaper>
+                </MudItem>
+            }
+        </MudGrid>
+    </MudStack>
+}
+else if (_project is not null)
+{
+    <MudStack Spacing="4">
+
+        @* ── 1. HEADER ────────────────────────────────────────────────────── *@
+        <MudStack Row="true" AlignItems="AlignItems.Center" Justify="Justify.SpaceBetween" Class="flex-wrap">
+            <div>
+                <MudText Class="project-title">@_project.Name</MudText>
+                @if (!string.IsNullOrWhiteSpace(_project.Description))
+                {
+                    <MudText Typo="Typo.body1" Class="mt-1" Style="color:#94A3B8;">@_project.Description</MudText>
+                }
+                @if (!string.IsNullOrWhiteSpace(_project.Goals))
+                {
+                    <MudText Typo="Typo.body2" Class="mt-1" Style="color:#7B8EA8;">
+                        <strong style="color:#00E5FF;">Goals:</strong> @_project.Goals
+                    </MudText>
+                }
+            </div>
+            <MudStack Row="true" Spacing="1" AlignItems="AlignItems.Center">
+                <MudButton Variant="Variant.Outlined"
+                           StartIcon="@Icons.Material.Filled.Edit"
+                           Style="border-color:#00E5FF; color:#00E5FF;"
+                           OnClick="OpenEditDialog"
+                           aria-label="Edit project">Edit</MudButton>
+                <MudIconButton Icon="@Icons.Material.Filled.ArrowBack"
+                               Href="/projects"
+                               aria-label="Back to projects"
+                               Style="color:#7B8EA8;" />
+            </MudStack>
+        </MudStack>
+
+        @* ── 2. STATS PANEL ───────────────────────────────────────────────── *@
+        <MudGrid Spacing="3">
+            <MudItem xs="12" sm="6" md="3">
+                <MudPaper Class="stat-card pa-4">
+                    <MudText Typo="Typo.caption" Style="color:#7B8EA8; text-transform:uppercase; letter-spacing:0.05em;">Open Todos</MudText>
+                    <MudText Class="stat-value" Style="color:#00E5FF;">@_openCount</MudText>
+                    <MudText Typo="Typo.caption" Style="color:#4A5568;">of @_totalCount total</MudText>
+                </MudPaper>
+            </MudItem>
+            <MudItem xs="12" sm="6" md="3">
+                <MudPaper Class="stat-card pa-4">
+                    <MudText Typo="Typo.caption" Style="color:#7B8EA8; text-transform:uppercase; letter-spacing:0.05em;">Active Agents</MudText>
+                    <MudText Class="stat-value" Style="color:#9C27B0;">@_activeAgentCount</MudText>
+                    <MudText Typo="Typo.caption" Style="color:#4A5568;">in-progress claims</MudText>
+                </MudPaper>
+            </MudItem>
+            <MudItem xs="12" sm="6" md="3">
+                <MudPaper Class="stat-card pa-4">
+                    <MudText Typo="Typo.caption" Style="color:#7B8EA8; text-transform:uppercase; letter-spacing:0.05em;">Completion</MudText>
+                    <MudText Class="stat-value" Style="color:#4CAF50;">@_completionPct%</MudText>
+                    <MudProgressLinear Value="@_completionPct" Color="Color.Success" Rounded="true" Size="Size.Small" Class="mt-1" />
+                </MudPaper>
+            </MudItem>
+            <MudItem xs="12" sm="6" md="3">
+                <MudPaper Class="stat-card pa-4">
+                    <MudText Typo="Typo.caption" Style="color:#7B8EA8; text-transform:uppercase; letter-spacing:0.05em;">Overdue</MudText>
+                    <MudText Class="stat-value" Style="@(_overdueCount > 0 ? "color:#F44336;" : "color:#4CAF50;")">@_overdueCount</MudText>
+                    <MudText Typo="Typo.caption" Style="color:#4A5568;">past due date</MudText>
+                </MudPaper>
+            </MudItem>
+        </MudGrid>
+
+        @* ── 3. LAYOUT: EVENT FEED + TODOS ───────────────────────────────── *@
+        <MudGrid Spacing="3">
+
+            @* ── 3a. LIVE EVENT FEED ──────────────────────────────────────── *@
+            <MudItem xs="12" md="4">
+                <MudPaper Class="pa-3" Style="background:#0D1220; border:1px solid #1E2D45; border-radius:8px; height:420px; display:flex; flex-direction:column;">
+                    <MudStack Row="true" AlignItems="AlignItems.Center" Justify="Justify.SpaceBetween" Class="mb-2">
+                        <MudText Typo="Typo.subtitle1" Style="font-family:'Orbitron',sans-serif; color:#00E5FF; font-size:0.8rem;">
+                            ⚡ LIVE EVENTS
+                        </MudText>
+                        <MudChip T="string" Size="Size.Small" Color="@(_hubConnected ? Color.Success : Color.Default)"
+                                 Label="true">
+                            @(_hubConnected ? "Live" : "Offline")
+                        </MudChip>
+                    </MudStack>
+
+                    @if (_eventsLoading)
+                    {
+                        <MudProgressLinear Indeterminate="true" Color="Color.Info" Class="mb-2" />
+                    }
+
+                    <div id="event-feed-scroll" style="overflow-y:auto; flex:1; display:flex; flex-direction:column; gap:6px;">
+                        @if (_events.Count == 0 && !_eventsLoading)
+                        {
+                            <div style="display:flex; align-items:center; justify-content:center; height:100%; color:#4A5568;">
+                                <MudText Typo="Typo.caption">No events yet</MudText>
+                            </div>
+                        }
+                        @foreach (var ev in _events)
+                        {
+                            <div class="event-item">
+                                <MudChip T="string" Size="Size.Small" Color="@GetEventColor(ev.EventType)"
+                                         Label="true" Class="event-type-chip">@ev.EventType</MudChip>
+                                <div class="event-details">
+                                    <MudText Typo="Typo.caption" Style="color:#CBD5E1; font-weight:500; white-space:nowrap; overflow:hidden; text-overflow:ellipsis;">
+                                        @ev.TodoTitle
+                                    </MudText>
+                                    <MudText Typo="Typo.caption" Style="color:#4A5568;">
+                                        @(ev.Actor ?? "system") · @RelativeTime(ev.OccurredAt)
+                                    </MudText>
+                                </div>
+                            </div>
+                        }
+                    </div>
+                </MudPaper>
+            </MudItem>
+
+            @* ── 3b. TODOS TABLE ──────────────────────────────────────────── *@
+            <MudItem xs="12" md="8">
+                <MudPaper Class="pa-3" Style="background:#0D1220; border:1px solid #1E2D45; border-radius:8px;">
+                    <MudStack Row="true" AlignItems="AlignItems.Center" Justify="Justify.SpaceBetween" Class="mb-3">
+                        <MudText Typo="Typo.subtitle1" Style="font-family:'Orbitron',sans-serif; color:#00E5FF; font-size:0.8rem;">
+                            ☑ TODOS
+                        </MudText>
+                        <MudButton Variant="Variant.Filled"
+                                   Color="Color.Primary"
+                                   Size="Size.Small"
+                                   StartIcon="@Icons.Material.Filled.Add"
+                                   OnClick="OpenNewTodoDialog"
+                                   aria-label="Create new todo for this project">New Todo</MudButton>
+                    </MudStack>
+
+                    <MudDataGrid @ref="_grid"
+                                 T="Todo"
+                                 ServerData="LoadTodoData"
+                                 Hover="true"
+                                 Dense="true"
+                                 Style="cursor:pointer">
+                        <Columns>
+                            <PropertyColumn Property="t => t.Title" Title="Title" />
+                            <TemplateColumn Title="Status">
+                                <CellTemplate>
+                                    <StatusBadge Status="@context.Item.Status" />
+                                </CellTemplate>
+                            </TemplateColumn>
+                            <TemplateColumn Title="Priority">
+                                <CellTemplate>
+                                    <PriorityBadge Priority="@context.Item.Priority" />
+                                </CellTemplate>
+                            </TemplateColumn>
+                            <PropertyColumn Property="t => t.AssignedTo" Title="Assigned" />
+                            <TemplateColumn Title="Due">
+                                <CellTemplate>
+                                    @if (context.Item.DueAt.HasValue)
+                                    {
+                                        var overdue = context.Item.DueAt < DateTime.UtcNow && context.Item.Status != TodoStatus.Done;
+                                        <MudText Typo="Typo.caption" Style="@(overdue ? "color:#F44336;" : "")">
+                                            @context.Item.DueAt.Value.ToString("MM-dd")
+                                        </MudText>
+                                    }
+                                </CellTemplate>
+                            </TemplateColumn>
+                            <TemplateColumn Title="Actions" CellClass="d-flex justify-end">
+                                <CellTemplate>
+                                    <MudStack Row="true" Spacing="0">
+                                        <MudIconButton Icon="@Icons.Material.Filled.Edit"
+                                                       Size="Size.Small"
+                                                       Href="@($"/todo/{context.Item.Id}")"
+                                                       aria-label="Edit todo" />
+                                        <MudIconButton Icon="@Icons.Material.Filled.Delete"
+                                                       Size="Size.Small"
+                                                       Color="Color.Error"
+                                                       OnClick="@(() => DeleteTodo(context.Item))"
+                                                       aria-label="Delete todo" />
+                                    </MudStack>
+                                </CellTemplate>
+                            </TemplateColumn>
+                        </Columns>
+                        <PagerContent>
+                            <MudDataGridPager T="Todo" PageSizeOptions="@(new[] { 10, 25, 50 })" />
+                        </PagerContent>
+                    </MudDataGrid>
+                </MudPaper>
+            </MudItem>
+        </MudGrid>
+
+        @* ── 4. FEATURE REQUESTS BACKLOG ─────────────────────────────────── *@
+        <MudPaper Class="pa-3" Style="background:#0D1220; border:1px solid #1E2D45; border-radius:8px;">
+            <MudStack Row="true" AlignItems="AlignItems.Center" Justify="Justify.SpaceBetween" Class="mb-3">
+                <MudText Typo="Typo.subtitle1" Style="font-family:'Orbitron',sans-serif; color:#00E5FF; font-size:0.8rem;">
+                    ✦ FEATURE REQUESTS
+                </MudText>
+                <MudButton Variant="Variant.Filled"
+                           Color="Color.Secondary"
+                           Size="Size.Small"
+                           StartIcon="@Icons.Material.Filled.Add"
+                           OnClick="@(() => { _showNewFeatureForm = true; StateHasChanged(); })"
+                           aria-label="Add feature request">Add Feature Request</MudButton>
+            </MudStack>
+
+            @* Inline "New feature request" form — always rendered, toggled with display:none to avoid MudSelect @if issue *@
+            <div style="@(_showNewFeatureForm ? "" : "display:none")">
+                <MudPaper Class="pa-3 mb-3" Style="background:#111827; border:1px solid #1E2D45; border-radius:6px;">
+                    <MudStack Spacing="3">
+                        <MudText Typo="Typo.subtitle2" Style="color:#00E5FF;">New Feature Request</MudText>
+                        <MudTextField @bind-Value="_newFeature.Title"
+                                      Label="Title"
+                                      Required="true"
+                                      MaxLength="200"
+                                      Variant="Variant.Outlined"
+                                      aria-label="Feature request title" />
+                        <MudTextField @bind-Value="_newFeature.Description"
+                                      Label="Description"
+                                      Lines="2"
+                                      MaxLength="2000"
+                                      Variant="Variant.Outlined"
+                                      aria-label="Feature request description" />
+                        <MudSelect T="TodoPriority" @bind-Value="_newFeature.Priority"
+                                   Label="Priority"
+                                   Variant="Variant.Outlined">
+                            @foreach (var p in Enum.GetValues<TodoPriority>())
+                            {
+                                <MudSelectItem T="TodoPriority" Value="@p">@p.ToString()</MudSelectItem>
+                            }
+                        </MudSelect>
+                        <MudStack Row="true" Justify="Justify.FlexEnd" Spacing="2">
+                            <MudButton OnClick="@(() => { _showNewFeatureForm = false; _newFeature = new(); })">Cancel</MudButton>
+                            <MudButton Color="Color.Primary" Variant="Variant.Filled"
+                                       Disabled="@(string.IsNullOrWhiteSpace(_newFeature.Title))"
+                                       OnClick="SubmitNewFeature">Save</MudButton>
+                        </MudStack>
+                    </MudStack>
+                </MudPaper>
+            </div>
+
+            @if (_featuresLoading)
+            {
+                <MudProgressLinear Indeterminate="true" Color="Color.Secondary" />
+            }
+            else if (_features.Count == 0)
+            {
+                <div style="text-align:center; padding:2rem; color:#4A5568;">
+                    <MudText Typo="Typo.caption">No feature requests yet. Add the first one!</MudText>
+                </div>
+            }
+            else
+            {
+                <MudTable T="FeatureRequest" Items="_features" Hover="true" Dense="true"
+                          Style="background:transparent;">
+                    <HeaderContent>
+                        <MudTh>Title</MudTh>
+                        <MudTh>Priority</MudTh>
+                        <MudTh>Status</MudTh>
+                        <MudTh Style="text-align:right">Actions</MudTh>
+                    </HeaderContent>
+                    <RowTemplate>
+                        <MudTd>
+                            <div>
+                                <MudText Typo="Typo.body2" Style="color:#CBD5E1;">@context.Title</MudText>
+                                @if (!string.IsNullOrWhiteSpace(context.Description))
+                                {
+                                    <MudText Typo="Typo.caption" Style="color:#4A5568;">
+                                        @Truncate(context.Description, 80)
+                                    </MudText>
+                                }
+                            </div>
+                        </MudTd>
+                        <MudTd><PriorityBadge Priority="@context.Priority" /></MudTd>
+                        <MudTd>
+                            @* Status selector — always rendered (not inside @if) to avoid MudSelect crash *@
+                            <MudSelect T="FeatureRequestStatus"
+                                       Value="@context.Status"
+                                       ValueChanged="@((FeatureRequestStatus s) => PatchFeatureStatus(context, s))"
+                                       Variant="Variant.Text"
+                                       Style="min-width:120px">
+                                @foreach (var s in Enum.GetValues<FeatureRequestStatus>())
+                                {
+                                    <MudSelectItem T="FeatureRequestStatus" Value="@s">
+                                        @s.ToString()
+                                    </MudSelectItem>
+                                }
+                            </MudSelect>
+                        </MudTd>
+                        <MudTd Style="text-align:right">
+                            <MudIconButton Icon="@Icons.Material.Filled.Delete"
+                                           Size="Size.Small"
+                                           Color="Color.Error"
+                                           OnClick="@(() => DeleteFeature(context))"
+                                           aria-label="Delete feature request" />
+                        </MudTd>
+                    </RowTemplate>
+                </MudTable>
+            }
+        </MudPaper>
+
+    </MudStack>
+}
+
+@code {
+    [Parameter] public Guid ProjectId { get; set; }
+
+    // ── Data ────────────────────────────────────────────────────────────────
+    private Project? _project;
+    private List<Todo> _allTodos = [];
+    private List<TodoEvent> _events = [];
+    private List<FeatureRequest> _features = [];
+
+    // ── Stats ────────────────────────────────────────────────────────────────
+    private int _openCount;
+    private int _totalCount;
+    private int _activeAgentCount;
+    private int _completionPct;
+    private int _overdueCount;
+
+    // ── UI state ─────────────────────────────────────────────────────────────
+    private bool _loading = true;
+    private bool _eventsLoading;
+    private bool _featuresLoading;
+    private bool _hubConnected;
+    private string? _initError;
+    private MudDataGrid<Todo>? _grid;
+    private bool _showNewFeatureForm;
+    private FeatureRequest _newFeature = new();
+
+    // ── SignalR ──────────────────────────────────────────────────────────────
+    private HubConnection? _hub;
+
+    // ────────────────────────────────────────────────────────────────────────
+    protected override async Task OnInitializedAsync()
+    {
+        try
+        {
+            _project = await Http.GetFromJsonAsync<Project>($"api/projects/{ProjectId}");
+            if (_project is null)
+            {
+                _initError = "Project not found.";
+                _loading = false;
+                return;
+            }
+
+            await Task.WhenAll(
+                LoadTodoStatsAsync(),
+                LoadFeaturesAsync());
+        }
+        catch (Exception ex)
+        {
+            _initError = ex.Message;
+        }
+        finally
+        {
+            _loading = false;
+        }
+    }
+
+    protected override async Task OnAfterRenderAsync(bool firstRender)
+    {
+        if (!firstRender) return;
+
+        try
+        {
+            _hub = new HubConnectionBuilder()
+                .WithUrl(Nav.ToAbsoluteUri("/hubs/agentboard"))
+                .WithAutomaticReconnect()
+                .Build();
+
+            _hub.On("TodoUpdated", async (object _) =>
+            {
+                await InvokeAsync(async () =>
+                {
+                    await LoadTodoStatsAsync();
+                    await RefreshEventsAsync();
+                    if (_grid is not null)
+                        await _grid.ReloadServerData();
+                    StateHasChanged();
+                });
+            });
+
+            _hub.Reconnected += async _ =>
+            {
+                _hubConnected = true;
+                await InvokeAsync(StateHasChanged);
+            };
+
+            _hub.Closed += async _ =>
+            {
+                _hubConnected = false;
+                await InvokeAsync(StateHasChanged);
+            };
+
+            await _hub.StartAsync();
+            _hubConnected = _hub.State == HubConnectionState.Connected;
+
+            // Load events after hub is up (so initial render is fast)
+            await RefreshEventsAsync();
+            StateHasChanged();
+        }
+        catch (Exception ex)
+        {
+            Snackbar.Add($"SignalR: {ex.Message}", Severity.Warning);
+        }
+    }
+
+    // ── Stats ────────────────────────────────────────────────────────────────
+    private async Task LoadTodoStatsAsync()
+    {
+        try
+        {
+            var result = await Http.GetFromJsonAsync<PagedResult<Todo>>(
+                $"api/todos?projectId={ProjectId}&page=1&pageSize=500");
+            if (result is null) return;
+
+            _allTodos    = result.Items;
+            _totalCount  = result.TotalCount;
+            _openCount   = result.Items.Count(t => t.Status != TodoStatus.Done);
+            _activeAgentCount = result.Items
+                .Where(t => t.Status == TodoStatus.InProgress && t.ClaimedBy is not null)
+                .Select(t => t.ClaimedBy!)
+                .Distinct()
+                .Count();
+
+            var doneCount    = result.Items.Count(t => t.Status == TodoStatus.Done);
+            _completionPct   = _totalCount > 0 ? (int)Math.Round(doneCount * 100.0 / _totalCount) : 0;
+            _overdueCount    = result.Items.Count(t =>
+                t.DueAt.HasValue && t.DueAt < DateTime.UtcNow && t.Status != TodoStatus.Done);
+        }
+        catch
+        {
+            // Non-fatal — stats just show zeroes
+        }
+    }
+
+    // ── Events ───────────────────────────────────────────────────────────────
+    private async Task RefreshEventsAsync()
+    {
+        _eventsLoading = true;
+        try
+        {
+            if (_allTodos.Count == 0)
+                await LoadTodoStatsAsync();
+
+            // Fetch events for every todo in parallel then merge, newest first, limit 20
+            var tasks = _allTodos.Select(t =>
+                Http.GetFromJsonAsync<List<TodoEvent>>($"api/todos/{t.Id}/events")
+                    .ContinueWith(r => r.Result ?? []));
+
+            var results = await Task.WhenAll(tasks);
+            _events = results
+                .SelectMany(r => r)
+                .OrderByDescending(e => e.OccurredAt)
+                .Take(20)
+                .ToList();
+
+            // Scroll event feed to top after update
+            try
+            {
+                await JS.InvokeVoidAsync("eval",
+                    "var el=document.getElementById('event-feed-scroll'); if(el) el.scrollTop=0;");
+            }
+            catch { /* JS unavailable during SSR — ignore */ }
+        }
+        catch
+        {
+            // Non-fatal
+        }
+        finally
+        {
+            _eventsLoading = false;
+        }
+    }
+
+    // ── Todo data grid ───────────────────────────────────────────────────────
+    private async Task<GridData<Todo>> LoadTodoData(GridState<Todo> state, CancellationToken _ct)
+    {
+        var page     = state.Page + 1;
+        var pageSize = state.PageSize;
+        try
+        {
+            var result = await Http.GetFromJsonAsync<PagedResult<Todo>>(
+                $"api/todos?projectId={ProjectId}&page={page}&pageSize={pageSize}");
+            return new GridData<Todo>
+            {
+                Items      = result?.Items ?? [],
+                TotalItems = result?.TotalCount ?? 0
+            };
+        }
+        catch
+        {
+            return new GridData<Todo> { Items = [], TotalItems = 0 };
+        }
+    }
+
+    private async Task OpenNewTodoDialog()
+    {
+        var model = new CreateTodoRequest();
+        // Pre-fill ProjectId by passing it via a custom extended dialog
+        var parameters = new DialogParameters<CreateTodoProjectDialog>
+        {
+            { x => x.Model, model },
+            { x => x.ProjectId, ProjectId }
+        };
+        var dialog = await DialogService.ShowAsync<CreateTodoProjectDialog>("New Todo", parameters);
+        var result = await dialog.Result;
+        if (result is { Canceled: false })
+        {
+            await LoadTodoStatsAsync();
+            if (_grid is not null)
+                await _grid.ReloadServerData();
+        }
+    }
+
+    private async Task DeleteTodo(Todo todo)
+    {
+        var parameters = new DialogParameters<ConfirmDialog>
+        {
+            { x => x.ContentText, $"Delete \"{todo.Title}\"? This cannot be undone." },
+            { x => x.ButtonText, "Delete" }
+        };
+        var dialog = await DialogService.ShowAsync<ConfirmDialog>("Confirm Delete", parameters);
+        var result = await dialog.Result;
+        if (result is { Canceled: false })
+        {
+            try
+            {
+                var resp = await Http.DeleteAsync($"api/todos/{todo.Id}");
+                resp.EnsureSuccessStatusCode();
+                Snackbar.Add("Todo deleted", Severity.Success);
+                await LoadTodoStatsAsync();
+                if (_grid is not null)
+                    await _grid.ReloadServerData();
+            }
+            catch (Exception ex)
+            {
+                Snackbar.Add($"Error: {ex.Message}", Severity.Error);
+            }
+        }
+    }
+
+    // ── Project edit ─────────────────────────────────────────────────────────
+    private async Task OpenEditDialog()
+    {
+        if (_project is null) return;
+        var model = new Project
+        {
+            Id          = _project.Id,
+            Name        = _project.Name,
+            Description = _project.Description,
+            Goals       = _project.Goals,
+            CreatedAt   = _project.CreatedAt,
+            UpdatedAt   = _project.UpdatedAt
+        };
+        var parameters = new DialogParameters<ProjectDialog> { { x => x.Model, model } };
+        var dialog = await DialogService.ShowAsync<ProjectDialog>("Edit Project", parameters);
+        var result = await dialog.Result;
+        if (result is { Canceled: false, Data: Project updated })
+        {
+            try
+            {
+                var resp = await Http.PutAsJsonAsync($"api/projects/{updated.Id}", updated);
+                resp.EnsureSuccessStatusCode();
+                _project = updated;
+                Snackbar.Add("Project updated", Severity.Success);
+                StateHasChanged();
+            }
+            catch (Exception ex)
+            {
+                Snackbar.Add($"Error updating project: {ex.Message}", Severity.Error);
+            }
+        }
+    }
+
+    // ── Feature requests ─────────────────────────────────────────────────────
+    private async Task LoadFeaturesAsync()
+    {
+        _featuresLoading = true;
+        try
+        {
+            var features = await Http.GetFromJsonAsync<List<FeatureRequest>>(
+                $"api/projects/{ProjectId}/features");
+            _features = features ?? [];
+        }
+        catch
+        {
+            _features = [];
+        }
+        finally
+        {
+            _featuresLoading = false;
+        }
+    }
+
+    private async Task SubmitNewFeature()
+    {
+        if (string.IsNullOrWhiteSpace(_newFeature.Title)) return;
+        try
+        {
+            _newFeature.ProjectId = ProjectId;
+            _newFeature.Status    = FeatureRequestStatus.Proposed;
+            var resp = await Http.PostAsJsonAsync($"api/projects/{ProjectId}/features", _newFeature);
+            resp.EnsureSuccessStatusCode();
+            Snackbar.Add("Feature request added", Severity.Success);
+            _showNewFeatureForm = false;
+            _newFeature = new();
+            await LoadFeaturesAsync();
+        }
+        catch (Exception ex)
+        {
+            Snackbar.Add($"Error: {ex.Message}", Severity.Error);
+        }
+    }
+
+    private async Task PatchFeatureStatus(FeatureRequest feature, FeatureRequestStatus newStatus)
+    {
+        try
+        {
+            var patch = new FeatureRequestPatch(null, null, null, newStatus);
+            var resp = await Http.PatchAsJsonAsync(
+                $"api/projects/{ProjectId}/features/{feature.Id}", patch);
+            resp.EnsureSuccessStatusCode();
+            feature.Status = newStatus;
+            Snackbar.Add("Status updated", Severity.Success);
+            StateHasChanged();
+        }
+        catch (Exception ex)
+        {
+            Snackbar.Add($"Error: {ex.Message}", Severity.Error);
+        }
+    }
+
+    private async Task DeleteFeature(FeatureRequest feature)
+    {
+        var parameters = new DialogParameters<ConfirmDialog>
+        {
+            { x => x.ContentText, $"Delete feature request \"{feature.Title}\"?" },
+            { x => x.ButtonText, "Delete" }
+        };
+        var dialog = await DialogService.ShowAsync<ConfirmDialog>("Confirm Delete", parameters);
+        var result = await dialog.Result;
+        if (result is { Canceled: false })
+        {
+            try
+            {
+                var resp = await Http.DeleteAsync($"api/projects/{ProjectId}/features/{feature.Id}");
+                resp.EnsureSuccessStatusCode();
+                Snackbar.Add("Feature request deleted", Severity.Success);
+                await LoadFeaturesAsync();
+            }
+            catch (Exception ex)
+            {
+                Snackbar.Add($"Error: {ex.Message}", Severity.Error);
+            }
+        }
+    }
+
+    // ── Helpers ──────────────────────────────────────────────────────────────
+    private static Color GetEventColor(string eventType) => eventType.ToLower() switch
+    {
+        "created"   => Color.Success,
+        "updated"   => Color.Info,
+        "claimed"   => Color.Warning,
+        "released"  => Color.Default,
+        "deleted"   => Color.Error,
+        "completed" => Color.Success,
+        _           => Color.Default
+    };
+
+    private static string RelativeTime(DateTime utc)
+    {
+        var elapsed = DateTime.UtcNow - utc;
+        return elapsed.TotalMinutes < 1   ? "just now"
+             : elapsed.TotalMinutes < 60  ? $"{(int)elapsed.TotalMinutes}m ago"
+             : elapsed.TotalHours   < 24  ? $"{(int)elapsed.TotalHours}h ago"
+             : $"{(int)elapsed.TotalDays}d ago";
+    }
+
+    private static string Truncate(string? text, int max)
+    {
+        if (string.IsNullOrEmpty(text)) return "";
+        return text.Length <= max ? text : text[..max] + "…";
+    }
+
+    public async ValueTask DisposeAsync()
+    {
+        if (_hub is not null)
+            await _hub.DisposeAsync();
+    }
+}
