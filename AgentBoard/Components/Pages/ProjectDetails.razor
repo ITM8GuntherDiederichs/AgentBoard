@@ -353,7 +353,70 @@ else if (_project is not null)
             }
         </MudPaper>
 
-        @* ── 5. ASSIGNMENTS ───────────────────────────────────────────────── *@
+        @* ── 5. ACTIVITY FEED ─────────────────────────────────────────────── *@
+        <MudPaper Class="pa-3" Style="background:#0D1220; border:1px solid #1E2D45; border-radius:8px;">
+
+            @* Panel header *@
+            <MudStack Row="true" AlignItems="AlignItems.Center" Justify="Justify.SpaceBetween" Class="mb-3">
+                <MudText Typo="Typo.subtitle1" Style="font-family:'Orbitron',sans-serif; color:#00E5FF; font-size:0.8rem;">
+                    ⚡ ACTIVITY FEED
+                </MudText>
+                <MudChip T="string" Size="Size.Small"
+                         Color="@(_hubConnected ? Color.Success : Color.Default)"
+                         Label="true"
+                         aria-label="@(_hubConnected ? "Live feed connected" : "Live feed offline")">
+                    @(_hubConnected ? "Live" : "Offline")
+                </MudChip>
+            </MudStack>
+
+            @if (_projectEventsLoading)
+            {
+                <MudProgressLinear Indeterminate="true" Color="Color.Info" Class="mb-2" />
+            }
+
+            @if (_projectEvents.Count == 0 && !_projectEventsLoading)
+            {
+                <div style="text-align:center; padding:2rem; color:#4A5568;">
+                    <MudText Typo="Typo.caption">No activity yet. Events from deployed agents will appear here.</MudText>
+                </div>
+            }
+            else
+            {
+                <div style="max-height:360px; overflow-y:auto; display:flex; flex-direction:column; gap:6px;"
+                     role="log" aria-live="polite" aria-label="Agent activity feed">
+                    @foreach (var ev in _projectEvents)
+                    {
+                        <div style="display:flex; align-items:flex-start; gap:8px; padding:6px 10px; background:#111827; border-radius:6px; border:1px solid #1E2D45;">
+
+                            @* EventType badge *@
+                            <span style="@GetProjectEventBadgeStyle(ev.EventType) flex-shrink:0; font-size:0.62rem; font-weight:700; padding:2px 8px; border-radius:4px; white-space:nowrap; font-family:'Orbitron',sans-serif; letter-spacing:0.04em; line-height:1.6;"
+                                  aria-label="Event type: @ev.EventType">
+                                @ev.EventType
+                            </span>
+
+                            @* Agent name + message *@
+                            <div style="flex:1; min-width:0;">
+                                <MudText Typo="Typo.body2" Style="color:#CBD5E1; word-break:break-word; line-height:1.4;">
+                                    <span style="color:#00E5FF; font-weight:600;">@(ev.AgentName ?? "Agent")</span>
+                                    <span style="color:#7B8EA8; margin:0 4px;">—</span>
+                                    @ev.Message
+                                </MudText>
+                            </div>
+
+                            @* Timestamp *@
+                            <MudText Typo="Typo.caption"
+                                     Style="color:#4A5568; flex-shrink:0; font-family:monospace; font-size:0.7rem; padding-top:2px;">
+                                @ev.CreatedAt.ToString("HH:mm:ss")
+                            </MudText>
+
+                        </div>
+                    }
+                </div>
+            }
+
+        </MudPaper>
+
+        @* ── 6. ASSIGNMENTS ───────────────────────────────────────────────── *@
         <MudGrid Spacing="3">
 
             @* ── 5a. ASSIGNED TEAMS ───────────────────────────────────────── *@
@@ -702,6 +765,7 @@ else if (_project is not null)
     private List<Todo> _allTodos = [];
     private List<TodoEvent> _events = [];
     private List<FeatureRequest> _features = [];
+    private List<ProjectEvent> _projectEvents = [];
 
     // ── Stats ────────────────────────────────────────────────────────────────
     private int _openCount;
@@ -713,6 +777,7 @@ else if (_project is not null)
     // ── UI state ─────────────────────────────────────────────────────────────
     private bool _loading = true;
     private bool _eventsLoading;
+    private bool _projectEventsLoading;
     private bool _featuresLoading;
     private bool _teamsLoading;
     private bool _agentsLoading;
@@ -766,6 +831,7 @@ else if (_project is not null)
             await Task.WhenAll(
                 LoadTodoStatsAsync(),
                 LoadFeaturesAsync(),
+                LoadProjectEventsAsync(),
                 LoadAllTeamsAsync(),
                 LoadAllAgentsAsync(),
                 LoadAssignedTeamsAsync(),
@@ -807,6 +873,17 @@ else if (_project is not null)
                 });
             });
 
+            _hub.On<ProjectEvent>("ProjectEventReceived", async (projectEvent) =>
+            {
+                await InvokeAsync(() =>
+                {
+                    _projectEvents.Insert(0, projectEvent);
+                    if (_projectEvents.Count > 50)
+                        _projectEvents.RemoveRange(50, _projectEvents.Count - 50);
+                    StateHasChanged();
+                });
+            });
+
             _hub.Reconnected += async _ =>
             {
                 _hubConnected = true;
@@ -821,6 +898,9 @@ else if (_project is not null)
 
             await _hub.StartAsync();
             _hubConnected = _hub.State == HubConnectionState.Connected;
+
+            // Join the project's SignalR group to receive ProjectEventReceived broadcasts
+            await _hub.InvokeAsync("JoinProject", ProjectId.ToString());
 
             // Load events after hub is up (so initial render is fast)
             await RefreshEventsAsync();
@@ -1393,6 +1473,38 @@ else if (_project is not null)
         }
     }
 
+    // ── Project Events (Agent Activity Feed) ─────────────────────────────────
+    private async Task LoadProjectEventsAsync()
+    {
+        _projectEventsLoading = true;
+        try
+        {
+            var events = await Http.GetFromJsonAsync<List<ProjectEvent>>(
+                $"api/projects/{ProjectId}/events?limit=50");
+            _projectEvents = events ?? [];
+        }
+        catch
+        {
+            _projectEvents = [];
+        }
+        finally
+        {
+            _projectEventsLoading = false;
+        }
+    }
+
+    /// <summary>Returns an inline CSS style string for the EventType badge chip.</summary>
+    private static string GetProjectEventBadgeStyle(ProjectEventType type) => type switch
+    {
+        ProjectEventType.Progress   => "background:#00E5FF; color:#0A0E1A;",
+        ProjectEventType.Blocked    => "background:#FF6D00; color:#fff;",
+        ProjectEventType.Completed  => "background:#4CAF50; color:#fff;",
+        ProjectEventType.Error      => "background:#F44336; color:#fff;",
+        ProjectEventType.Note       => "background:#7B8EA8; color:#fff;",
+        ProjectEventType.TestResult => "background:#B388FF; color:#0A0E1A;",
+        _                           => "background:#2D3748; color:#fff;"
+    };
+
     // ── Helpers ──────────────────────────────────────────────────────────────
     private static Color GetEventColor(string eventType) => eventType.ToLower() switch
     {
@@ -1423,6 +1535,13 @@ else if (_project is not null)
     public async ValueTask DisposeAsync()
     {
         if (_hub is not null)
+        {
+            if (_hub.State == HubConnectionState.Connected)
+            {
+                try { await _hub.InvokeAsync("LeaveProject", ProjectId.ToString()); }
+                catch { /* best-effort — connection may already be closing */ }
+            }
             await _hub.DisposeAsync();
+        }
     }
 }
