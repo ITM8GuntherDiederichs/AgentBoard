@@ -2,6 +2,7 @@
 @rendermode @(new InteractiveServerRenderMode(prerender: false))
 @using AgentBoard.Contracts
 @using AgentBoard.Data.Models
+@using AgentBoard.Services
 @using Microsoft.AspNetCore.SignalR.Client
 @inject HttpClient Http
 @inject IJSRuntime JS
@@ -169,7 +170,22 @@ else if (_project is not null)
                                  Dense="true"
                                  Style="cursor:pointer">
                         <Columns>
-                            <PropertyColumn Property="t => t.Title" Title="Title" />
+                            <TemplateColumn Title="Title">
+                                <CellTemplate>
+                                    <MudStack Row="true" AlignItems="AlignItems.Center" Spacing="1">
+                                        <MudText Typo="Typo.body2" Style="color:#CBD5E1;">@context.Item.Title</MudText>
+                                        @if (context.Item.ExternalIssueNumber.HasValue && context.Item.ExternalIssueNumber > 0)
+                                        {
+                                            <a href="@GetExternalIssueUrl(context.Item.ExternalIssueNumber.Value, context.Item.ExternalSystem)"
+                                               target="_blank" rel="noopener noreferrer"
+                                               style="display:inline-block; font-size:0.65rem; padding:1px 6px; border-radius:4px; background:#1E3A5F; color:#60ABDE; text-decoration:none; font-weight:600; flex-shrink:0;"
+                                               aria-label="@($"View external issue #{context.Item.ExternalIssueNumber}")">
+                                                #@context.Item.ExternalIssueNumber
+                                            </a>
+                                        }
+                                    </MudStack>
+                                </CellTemplate>
+                            </TemplateColumn>
                             <TemplateColumn Title="Status">
                                 <CellTemplate>
                                     <StatusBadge Status="@context.Item.Status" />
@@ -289,7 +305,18 @@ else if (_project is not null)
                     <RowTemplate>
                         <MudTd>
                             <div>
-                                <MudText Typo="Typo.body2" Style="color:#CBD5E1;">@context.Title</MudText>
+                                <MudStack Row="true" AlignItems="AlignItems.Center" Spacing="1">
+                                    <MudText Typo="Typo.body2" Style="color:#CBD5E1;">@context.Title</MudText>
+                                    @if (context.ExternalIssueNumber.HasValue && context.ExternalIssueNumber > 0)
+                                    {
+                                        <a href="@GetExternalIssueUrl(context.ExternalIssueNumber.Value, context.ExternalSystem)"
+                                           target="_blank" rel="noopener noreferrer"
+                                           style="display:inline-block; font-size:0.65rem; padding:1px 6px; border-radius:4px; background:#1E3A5F; color:#60ABDE; text-decoration:none; font-weight:600; flex-shrink:0;"
+                                           aria-label="@($"View external issue #{context.ExternalIssueNumber}")">
+                                            #@context.ExternalIssueNumber
+                                        </a>
+                                    }
+                                </MudStack>
                                 @if (!string.IsNullOrWhiteSpace(context.Description))
                                 {
                                     <MudText Typo="Typo.caption" Style="color:#4A5568;">
@@ -551,6 +578,119 @@ else if (_project is not null)
 
         </MudGrid>
 
+        @* ── 6. INTEGRATION ───────────────────────────────────────────────── *@
+        <MudPaper Class="pa-3" Style="background:#0D1220; border:1px solid #1E2D45; border-radius:8px;">
+
+            @* Section header + status badge + sync button *@
+            <MudStack Row="true" AlignItems="AlignItems.Center" Justify="Justify.SpaceBetween" Class="mb-3 flex-wrap" style="gap:8px;">
+                <MudStack Row="true" AlignItems="AlignItems.Center" Spacing="2">
+                    <MudText Typo="Typo.subtitle1" Style="font-family:'Orbitron',sans-serif; color:#00E5FF; font-size:0.8rem;">
+                        ⇄ INTEGRATION
+                    </MudText>
+                    @if (_integrationStatus is not null)
+                    {
+                        <MudChip T="string" Size="Size.Small"
+                                 Color="@(_integrationStatus.IsConnected ? Color.Success : Color.Default)"
+                                 Label="true"
+                                 aria-label="@(_integrationStatus.IsConnected ? "Integration connected" : "Integration not connected")">
+                            @(_integrationStatus.IsConnected ? "Connected" : "Not Connected")
+                        </MudChip>
+                    }
+                    @if (_integrationStatus?.IntegrationType is string it && it != "None" && it != "0")
+                    {
+                        <MudChip T="string" Size="Size.Small" Color="Color.Info" Label="true"
+                                 Style="font-size:0.65rem; height:20px;">
+                            @it
+                        </MudChip>
+                    }
+                </MudStack>
+
+                @* Sync button — only visible when a GitHub/ADO integration is configured *@
+                @if (_teamIntegrationType != IntegrationType.None)
+                {
+                    <MudButton Variant="Variant.Outlined"
+                               Size="Size.Small"
+                               StartIcon="@(_isSyncing ? null : Icons.Material.Filled.Sync)"
+                               Style="border-color:#00E5FF; color:#00E5FF;"
+                               Disabled="@_isSyncing"
+                               OnClick="SyncAsync"
+                               aria-label="@($"Sync to {(_teamIntegrationType == IntegrationType.AzureDevOps ? "Azure DevOps" : "GitHub")}")">
+                        @if (_isSyncing)
+                        {
+                            <MudProgressCircular Size="Size.Small" Indeterminate="true" Style="color:#00E5FF; margin-right:4px;" />
+                            <span>Syncing…</span>
+                        }
+                        else
+                        {
+                            <span>Sync @(_teamIntegrationType == IntegrationType.AzureDevOps ? "Azure DevOps" : "GitHub")</span>
+                        }
+                    </MudButton>
+                }
+            </MudStack>
+
+            @* Loading indicator *@
+            @if (_integrationLoading)
+            {
+                <MudProgressLinear Indeterminate="true" Color="Color.Info" Class="mb-2" />
+            }
+
+            @* Integration details *@
+            @if (_integrationStatus is not null)
+            {
+                <MudStack Spacing="2">
+
+                    @* Connected-at timestamp *@
+                    @if (_integrationStatus.IsConnected && _integrationStatus.ConnectedAt.HasValue)
+                    {
+                        <MudText Typo="Typo.caption" Style="color:#7B8EA8;">
+                            Connected @RelativeTime(_integrationStatus.ConnectedAt.Value)
+                            (@_integrationStatus.ConnectedAt.Value.ToString("yyyy-MM-dd HH:mm") UTC)
+                        </MudText>
+                    }
+
+                    @* Last synced indicator — updates after each manual sync *@
+                    @if (_lastSynced.HasValue)
+                    {
+                        <MudText Typo="Typo.caption" Style="color:#4CAF50;">
+                            ✓ Last synced: @RelativeTime(_lastSynced.Value)
+                        </MudText>
+                    }
+
+                    @* Webhook URL (only when connected) *@
+                    @if (_integrationStatus.IsConnected && !string.IsNullOrWhiteSpace(_integrationStatus.WebhookUrl))
+                    {
+                        <MudStack Row="true" AlignItems="AlignItems.Center" Spacing="1">
+                            <MudTextField T="string"
+                                          Value="@_integrationStatus.WebhookUrl"
+                                          ReadOnly="true"
+                                          Label="Webhook URL"
+                                          HelperText="Configure this URL in your GitHub repo / Azure DevOps project settings"
+                                          Variant="Variant.Outlined"
+                                          FullWidth="true"
+                                          aria-label="Webhook URL" />
+                            <MudTooltip Text="Copy to clipboard">
+                                <MudIconButton Icon="@Icons.Material.Filled.ContentCopy"
+                                               Size="Size.Small"
+                                               Style="color:#00E5FF; flex-shrink:0; margin-top:-18px;"
+                                               OnClick="CopyWebhookUrlAsync"
+                                               aria-label="Copy webhook URL to clipboard" />
+                            </MudTooltip>
+                        </MudStack>
+                    }
+
+                    @* No integration configured yet *@
+                    @if (!_integrationStatus.IsConnected && _teamIntegrationType == IntegrationType.None)
+                    {
+                        <div style="text-align:center; padding:1rem; color:#4A5568;">
+                            <MudText Typo="Typo.caption">No integration configured. Assign a team with GitHub or Azure DevOps integration to enable sync.</MudText>
+                        </div>
+                    }
+
+                </MudStack>
+            }
+
+        </MudPaper>
+
     </MudStack>
 }
 
@@ -589,6 +729,13 @@ else if (_project is not null)
     private Guid _selectedTeamId = Guid.Empty;
     private Guid _selectedAgentId = Guid.Empty;
 
+    // ── Integration & Sync ────────────────────────────────────────────────────
+    private IntegrationStatusDto? _integrationStatus;
+    private IntegrationType _teamIntegrationType = IntegrationType.None;
+    private bool _isSyncing;
+    private bool _integrationLoading;
+    private DateTime? _lastSynced;
+
     // ── Assignment data ───────────────────────────────────────────────────────
     private List<Team> _allTeams = [];
     private List<Agent> _allAgents = [];
@@ -623,6 +770,9 @@ else if (_project is not null)
                 LoadAllAgentsAsync(),
                 LoadAssignedTeamsAsync(),
                 LoadAssignedAgentsAsync());
+
+            // Integration status fetched after teams are resolved (uses team integration type from API)
+            await LoadIntegrationStatusAsync();
         }
         catch (Exception ex)
         {
@@ -1097,6 +1247,103 @@ else if (_project is not null)
 
     private sealed record ProjectTeamEntryDto(Guid TeamId, DateTime AssignedAt);
     private sealed record ProjectAgentEntryDto(Guid AgentId, DateTime AssignedAt, string Source);
+
+    // ── Integration & Sync ────────────────────────────────────────────────────
+
+    private async Task LoadIntegrationStatusAsync()
+    {
+        _integrationLoading = true;
+        try
+        {
+            _integrationStatus = await Http.GetFromJsonAsync<IntegrationStatusDto>(
+                $"api/projects/{ProjectId}/integration/status");
+
+            // Parse the integration type string returned by the API
+            if (_integrationStatus is not null &&
+                Enum.TryParse<IntegrationType>(_integrationStatus.IntegrationType, ignoreCase: true, out var parsed))
+            {
+                _teamIntegrationType = parsed;
+            }
+        }
+        catch
+        {
+            // Non-fatal — integration section simply won't render details
+        }
+        finally
+        {
+            _integrationLoading = false;
+        }
+    }
+
+    private async Task SyncAsync()
+    {
+        _isSyncing = true;
+        StateHasChanged();
+        try
+        {
+            var endpoint = _teamIntegrationType == IntegrationType.AzureDevOps
+                ? $"api/projects/{ProjectId}/sync/azuredevops"
+                : $"api/projects/{ProjectId}/sync/github";
+
+            var resp = await Http.PostAsync(endpoint, null);
+            if (resp.IsSuccessStatusCode)
+            {
+                var result = await resp.Content.ReadFromJsonAsync<SyncResult>();
+                if (result is not null)
+                {
+                    _lastSynced = DateTime.UtcNow;
+                    var msg = $"Synced — {result.Created} created, {result.Updated} updated";
+                    if (result.Failed > 0)
+                        msg += $", {result.Failed} failed";
+                    Snackbar.Add(msg, result.Failed > 0 ? Severity.Warning : Severity.Success);
+
+                    // Refresh todos and features to show newly assigned external issue numbers
+                    await Task.WhenAll(LoadTodoStatsAsync(), LoadFeaturesAsync());
+                    if (_grid is not null)
+                        await _grid.ReloadServerData();
+                }
+            }
+            else
+            {
+                var body = await resp.Content.ReadAsStringAsync();
+                Snackbar.Add($"Sync failed: {(string.IsNullOrWhiteSpace(body) ? resp.StatusCode.ToString() : body)}", Severity.Error);
+            }
+        }
+        catch (Exception ex)
+        {
+            Snackbar.Add($"Sync error: {ex.Message}", Severity.Error);
+        }
+        finally
+        {
+            _isSyncing = false;
+        }
+    }
+
+    private async Task CopyWebhookUrlAsync()
+    {
+        if (string.IsNullOrWhiteSpace(_integrationStatus?.WebhookUrl)) return;
+        try
+        {
+            await JS.InvokeVoidAsync("navigator.clipboard.writeText", _integrationStatus.WebhookUrl);
+            Snackbar.Add("Webhook URL copied to clipboard", Severity.Success);
+        }
+        catch
+        {
+            Snackbar.Add("Could not copy to clipboard — please copy manually", Severity.Warning);
+        }
+    }
+
+    private string GetExternalIssueUrl(int issueNumber, string? externalSystem)
+    {
+        var repoUrl = _integrationStatus?.RepoUrl?.TrimEnd('/') ?? "";
+        if (string.IsNullOrEmpty(repoUrl)) return "#";
+
+        return externalSystem?.ToLowerInvariant() switch
+        {
+            "azuredevops" => $"{repoUrl}/_workitems/edit/{issueNumber}",
+            _             => $"{repoUrl}/issues/{issueNumber}"   // GitHub default
+        };
+    }
 
     // ── Deploy ───────────────────────────────────────────────────────────────
 
