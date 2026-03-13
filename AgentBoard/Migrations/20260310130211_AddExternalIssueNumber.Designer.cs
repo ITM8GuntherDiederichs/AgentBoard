@@ -4,6 +4,7 @@ using AgentBoard.Data;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.EntityFrameworkCore.Infrastructure;
 using Microsoft.EntityFrameworkCore.Metadata;
+using Microsoft.EntityFrameworkCore.Migrations;
 using Microsoft.EntityFrameworkCore.Storage.ValueConversion;
 
 #nullable disable
@@ -11,9 +12,11 @@ using Microsoft.EntityFrameworkCore.Storage.ValueConversion;
 namespace AgentBoard.Migrations
 {
     [DbContext(typeof(ApplicationDbContext))]
-    partial class ApplicationDbContextModelSnapshot : ModelSnapshot
+    [Migration("20260310130211_AddExternalIssueNumber")]
+    partial class AddExternalIssueNumber
     {
-        protected override void BuildModel(ModelBuilder modelBuilder)
+        /// <inheritdoc />
+        protected override void BuildTargetModel(ModelBuilder modelBuilder)
         {
 #pragma warning disable 612, 618
             modelBuilder
@@ -134,9 +137,6 @@ namespace AgentBoard.Migrations
 
                     b.Property<string>("Goals")
                         .HasColumnType("nvarchar(max)");
-
-                    b.Property<DateTime?>("IntegrationConnectedAt")
-                        .HasColumnType("datetime2");
 
                     b.Property<string>("IntegrationRepoUrl")
                         .HasColumnType("nvarchar(max)");
