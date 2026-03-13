@@ -116,7 +116,7 @@ public class ApplicationDbContext(DbContextOptions<ApplicationDbContext> options
         modelBuilder.Entity<ProjectEvent>(e =>
         {
             e.HasKey(x => x.Id);
-            e.Property(x => x.EventType).HasConversion<string>();
+            e.Property(x => x.EventType).HasConversion<string>().HasMaxLength(50);
             e.HasIndex(x => x.ProjectId); // fast by-project queries
             e.HasIndex(x => x.CreatedAt);
         });
