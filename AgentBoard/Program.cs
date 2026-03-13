@@ -29,6 +29,7 @@ builder.Services.AddScoped<SkillFileService>();
 builder.Services.AddScoped<DeployService>();
 builder.Services.AddHostedService<ClaimExpiryService>();
 builder.Services.AddScoped<GitHubSyncService>();
+builder.Services.AddScoped<AzureDevOpsSyncService>();
 builder.Services.AddHttpClient();
 
 builder.Services.AddMudServices();
