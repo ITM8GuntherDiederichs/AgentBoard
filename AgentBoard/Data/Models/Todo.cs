@@ -25,6 +25,11 @@ public class Todo
     public DateTime? ClaimExpiresAt { get; set; }
     public DateTime? DueAt { get; set; }
     public Guid? ProjectId { get; set; }
+    public int? ExternalIssueNumber { get; set; }
+
+    [MaxLength(50)]
+    public string? ExternalSystem { get; set; }  // "github" | "azuredevops" | null
+
     public DateTime CreatedAt { get; set; } = DateTime.UtcNow;
     public DateTime UpdatedAt { get; set; } = DateTime.UtcNow;
 

@@ -1,4 +1,4 @@
-﻿using AgentBoard.Api;
+using AgentBoard.Api;
 using AgentBoard.Components;
 using AgentBoard.Data;
 using AgentBoard.Hubs;
@@ -28,6 +28,8 @@ builder.Services.AddScoped<SkillService>();
 builder.Services.AddScoped<SkillFileService>();
 builder.Services.AddScoped<DeployService>();
 builder.Services.AddHostedService<ClaimExpiryService>();
+builder.Services.AddScoped<GitHubSyncService>();
+builder.Services.AddHttpClient();
 
 builder.Services.AddMudServices();
 
@@ -79,6 +81,7 @@ app.MapAgentEndpoints();
 app.MapTeamEndpoints();
 app.MapSkillEndpoints();
 app.MapSkillFileEndpoints();
+app.MapSyncEndpoints();
 
 app.MapHub<AgentBoardHub>("/hubs/agentboard");
 
