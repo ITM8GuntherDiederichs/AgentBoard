@@ -31,6 +31,7 @@ builder.Services.AddHostedService<ClaimExpiryService>();
 builder.Services.AddScoped<IntegrationService>();
 builder.Services.AddScoped<GitHubSyncService>();
 builder.Services.AddScoped<AzureDevOpsSyncService>();
+builder.Services.AddScoped<ProjectEventService>();
 builder.Services.AddHttpClient();
 builder.Services.AddHttpClient("IntegrationValidator");
 
@@ -85,6 +86,7 @@ app.MapTeamEndpoints();
 app.MapSkillEndpoints();
 app.MapSkillFileEndpoints();
 app.MapSyncEndpoints();
+app.MapProjectEventEndpoints();
 
 app.MapHub<AgentBoardHub>("/hubs/agentboard");
 
