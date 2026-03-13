@@ -30,7 +30,7 @@ builder.Services.AddScoped<DeployService>();
 builder.Services.AddHostedService<ClaimExpiryService>();
 builder.Services.AddScoped<IntegrationService>();
 builder.Services.AddScoped<GitHubSyncService>();
-
+builder.Services.AddScoped<AzureDevOpsSyncService>();
 builder.Services.AddHttpClient();
 builder.Services.AddHttpClient("IntegrationValidator");
 
