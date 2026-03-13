@@ -46,14 +46,38 @@ public static class ProjectEndpoints
         });
 
         // POST /api/projects/{id}/integration
-        group.MapPost("/{id:guid}/integration", async (Guid id, IntegrationRequest body, ProjectService svc) =>
+        group.MapPost("/{id:guid}/integration", async (
+            Guid id,
+            IntegrationRequest body,
+            IntegrationService integrationSvc,
+            IConfiguration config) =>
         {
-            var patch = new ProjectPatch(
-                IntegrationToken: body.IntegrationToken,
-                IntegrationRepoUrl: body.IntegrationRepoUrl,
-                ExternalProjectId: body.ExternalProjectId);
-            var updated = await svc.PatchAsync(id, patch);
-            return updated is null ? Results.NotFound() : Results.Ok(updated);
+            var (project, error) = await integrationSvc.ConnectAsync(
+                id,
+                body.IntegrationToken,
+                body.IntegrationRepoUrl,
+                body.ExternalProjectId);
+
+            if (project is null) return Results.NotFound();
+            if (error is not null) return Results.BadRequest(new { error });
+
+            var boardBaseUrl = config["BoardBaseUrl"]?.TrimEnd('/') ?? "http://localhost:5227";
+            var webhookUrl = $"{boardBaseUrl}/api/projects/{id}/sync/github/webhook";
+
+            return Results.Ok(new
+            {
+                project = IntegrationService.ToSafeDto(project),
+                webhookUrl
+            });
+        });
+
+        // GET /api/projects/{id}/integration/status
+        group.MapGet("/{id:guid}/integration/status", async (
+            Guid id,
+            IntegrationService integrationSvc) =>
+        {
+            var status = await integrationSvc.GetStatusAsync(id);
+            return status is null ? Results.NotFound() : Results.Ok(status);
         });
 
         // GET /api/projects/{id}/deploy
@@ -75,3 +99,4 @@ public sealed record IntegrationRequest(
     string? IntegrationToken,
     string? IntegrationRepoUrl,
     string? ExternalProjectId);
+

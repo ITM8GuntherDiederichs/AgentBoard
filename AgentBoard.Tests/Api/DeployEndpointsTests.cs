@@ -93,10 +93,11 @@ public class DeployEndpointsTests : IClassFixture<SkillFileWebFactory>
 
         Assert.Equal(HttpStatusCode.OK, response.StatusCode);
 
-        var updated = await response.Content.ReadFromJsonAsync<ProjectDetailDto>();
-        Assert.NotNull(updated);
-        Assert.Equal("https://github.com/org/repo", updated.IntegrationRepoUrl);
-        Assert.Equal("org/repo", updated.ExternalProjectId);
+        var updated = await response.Content.ReadFromJsonAsync<IntegrationConnectResponseDto>();
+        Assert.NotNull(updated?.Project);
+        Assert.Equal("https://github.com/org/repo", updated.Project.IntegrationRepoUrl);
+        Assert.Equal("org/repo", updated.Project.ExternalProjectId);
+        Assert.NotNull(updated.WebhookUrl);
     }
 
     [Fact]
@@ -139,4 +140,17 @@ public class DeployEndpointsTests : IClassFixture<SkillFileWebFactory>
         string? ExternalProjectId,
         DateTime CreatedAt,
         DateTime UpdatedAt);
+
+    private sealed record ProjectSafeDto(
+        Guid Id,
+        string Name,
+        string? Description,
+        string? Goals,
+        string? IntegrationRepoUrl,
+        string? ExternalProjectId,
+        DateTime? IntegrationConnectedAt,
+        DateTime CreatedAt,
+        DateTime UpdatedAt);
+
+    private sealed record IntegrationConnectResponseDto(ProjectSafeDto Project, string WebhookUrl);
 }

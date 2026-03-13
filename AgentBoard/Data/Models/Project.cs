@@ -22,4 +22,7 @@ public class Project
 
     /// <summary>Optional external project ID (e.g. GitHub repo full name or Azure DevOps project ID). Max 500 characters.</summary>
     public string? ExternalProjectId { get; set; }
+
+    /// <summary>UTC timestamp when the integration token was last validated and stored. Null if not yet connected.</summary>
+    public DateTime? IntegrationConnectedAt { get; set; }
 }
