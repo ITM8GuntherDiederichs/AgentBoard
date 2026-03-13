@@ -5,6 +5,7 @@
 @inject HttpClient Http
 @inject IDialogService DialogService
 @inject ISnackbar Snackbar
+@implements IDisposable
 
 @* MudPopoverProvider required for MudSelect in MudBlazor v9 *@
 <MudPopoverProvider />
@@ -201,12 +202,15 @@
     private Dictionary<Guid, Guid> _skillToAdd = [];
     private Dictionary<Guid, bool> _showAddSkill = [];
 
+    private readonly CancellationTokenSource _cts = new();
+
     protected override async Task OnInitializedAsync()
     {
         try
         {
             await LoadAgentsAsync();
         }
+        catch (OperationCanceledException) { }
         catch (Exception ex)
         {
             _initError = ex.Message;
@@ -219,32 +223,43 @@
         _loading = true;
         try
         {
-            var agents = await Http.GetFromJsonAsync<List<Agent>>("api/agents");
+            var ct = _cts.Token;
+
+            var agents = await Http.GetFromJsonAsync<List<Agent>>("api/agents", ct);
             _agents = agents ?? [];
 
             // Load all available skills for the add-skill dropdown
-            var allSkills = await Http.GetFromJsonAsync<List<Skill>>("api/skills");
+            var allSkills = await Http.GetFromJsonAsync<List<Skill>>("api/skills", ct);
             _allSkills = allSkills ?? [];
 
-            // Load assigned skills for every agent, initialise per-agent dictionaries
+            // Load assigned skills for every agent in parallel
             _agentSkills.Clear();
             _skillToAdd.Clear();
             _showAddSkill.Clear();
-            foreach (var agent in _agents)
+
+            var skillTasks = _agents.Select(async agent =>
             {
                 try
                 {
-                    var assigned = await Http.GetFromJsonAsync<List<Skill>>($"api/agents/{agent.Id}/skills");
-                    _agentSkills[agent.Id] = assigned ?? [];
+                    var assigned = await Http.GetFromJsonAsync<List<Skill>>($"api/agents/{agent.Id}/skills", ct);
+                    return (agent.Id, skills: assigned ?? []);
                 }
+                catch (OperationCanceledException) { throw; }
                 catch
                 {
-                    _agentSkills[agent.Id] = [];
+                    return (agent.Id, skills: new List<Skill>());
                 }
-                _skillToAdd[agent.Id] = Guid.Empty;
-                _showAddSkill[agent.Id] = false;
+            });
+
+            var results = await Task.WhenAll(skillTasks);
+            foreach (var (agentId, skills) in results)
+            {
+                _agentSkills[agentId] = skills;
+                _skillToAdd[agentId] = Guid.Empty;
+                _showAddSkill[agentId] = false;
             }
         }
+        catch (OperationCanceledException) { throw; }
         catch (Exception ex)
         {
             _initError = ex.Message;
@@ -254,6 +269,8 @@
             _loading = false;
         }
     }
+
+    public void Dispose() => _cts.Cancel();
 
     private async Task OpenCreateDialog()
     {
