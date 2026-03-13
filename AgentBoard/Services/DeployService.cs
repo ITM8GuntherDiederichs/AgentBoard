@@ -122,7 +122,8 @@ public class DeployService(
                 syncEndpoint,
                 webhookEndpoint,
                 todosEndpoint = $"https://{boardBaseUrl}/api/todos",
-                featuresEndpoint = $"https://{boardBaseUrl}/api/feature-requests"
+                featuresEndpoint = $"https://{boardBaseUrl}/api/feature-requests",
+                eventsEndpoint = $"https://{boardBaseUrl}/api/projects/{project.Id}/events"
             }, new JsonSerializerOptions { WriteIndented = true });
             WriteEntry(archive, "agentboard.json", agentboardJson);
 
@@ -205,6 +206,7 @@ public class DeployService(
         var statusEndpoint = $"{integrationEndpoint}/status";
         var todosEndpoint = $"{apiBase}/todos";
         var featuresEndpoint = $"{apiBase}/feature-requests";
+        var eventsEndpoint = $"{apiBase}/projects/{project.Id}/events";
 
         var sb = new StringBuilder();
         sb.AppendLine($"# AgentBoard Setup Guide — {project.Name}");
@@ -392,6 +394,19 @@ public class DeployService(
         sb.AppendLine("  }'");
         sb.AppendLine("```");
         sb.AppendLine();
+        sb.AppendLine("### Push a live progress event");
+        sb.AppendLine("Valid EventType values: `Progress`, `Blocked`, `Completed`, `Error`, `Note`, `TestResult`");
+        sb.AppendLine("```bash");
+        sb.AppendLine($"curl -X POST \"{eventsEndpoint}\" \\");
+        sb.AppendLine("  -H \"Content-Type: application/json\" \\");
+        sb.AppendLine("  -d '{");
+        sb.AppendLine("    \"agentName\": \"backend-agent\",");
+        sb.AppendLine("    \"eventType\": \"Progress\",");
+        sb.AppendLine("    \"message\": \"Running database migrations\",");
+        sb.AppendLine("    \"metadata\": null");
+        sb.AppendLine("  }'");
+        sb.AppendLine("```");
+        sb.AppendLine();
         sb.AppendLine("---");
         sb.AppendLine();
         sb.AppendLine("## Quick reference");
@@ -407,6 +422,8 @@ public class DeployService(
         sb.AppendLine($"| `{todosEndpoint}` | GET/POST | List or create todos |");
         sb.AppendLine($"| `{todosEndpoint}/{{id}}` | PATCH | Update todo status / claim |");
         sb.AppendLine($"| `{featuresEndpoint}` | GET/POST | List or submit feature requests |");
+        sb.AppendLine($"| `{eventsEndpoint}` | POST | Push a live agent activity event |");
+        sb.AppendLine($"| `{eventsEndpoint}` | GET | Fetch recent events for project |");
 
         return sb.ToString();
     }

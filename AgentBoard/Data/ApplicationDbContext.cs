@@ -18,6 +18,7 @@ public class ApplicationDbContext(DbContextOptions<ApplicationDbContext> options
     public DbSet<AgentSkill> AgentSkills => Set<AgentSkill>();
     public DbSet<TeamSkill> TeamSkills => Set<TeamSkill>();
     public DbSet<SkillFile> SkillFiles => Set<SkillFile>();
+    public DbSet<ProjectEvent> ProjectEvents => Set<ProjectEvent>();
 
     protected override void OnModelCreating(ModelBuilder modelBuilder)
     {
@@ -110,6 +111,14 @@ public class ApplicationDbContext(DbContextOptions<ApplicationDbContext> options
         {
             e.HasIndex(sf => sf.SkillId);
             // No FK constraint to Skills table - plain Guid reference (loose coupling pattern)
+        });
+
+        modelBuilder.Entity<ProjectEvent>(e =>
+        {
+            e.HasKey(x => x.Id);
+            e.Property(x => x.EventType).HasConversion<string>();
+            e.HasIndex(x => x.ProjectId); // fast by-project queries
+            e.HasIndex(x => x.CreatedAt);
         });
     }
 
