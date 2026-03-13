@@ -96,15 +96,39 @@ public class DeployService(
         using (var archive = new ZipArchive(ms, ZipArchiveMode.Create, leaveOpen: true))
         {
             // ── agentboard.json ──────────────────────────────────────────────
+            var integrationType = primaryTeam?.IntegrationType ?? IntegrationType.None;
+            var syncEndpoint = integrationType switch
+            {
+                IntegrationType.GitHub => $"https://{boardBaseUrl}/api/projects/{project.Id}/sync/github",
+                IntegrationType.AzureDevOps => $"https://{boardBaseUrl}/api/projects/{project.Id}/sync/azuredevops",
+                _ => null
+            };
+            var webhookEndpoint = integrationType switch
+            {
+                IntegrationType.GitHub => $"https://{boardBaseUrl}/api/projects/{project.Id}/sync/github/webhook",
+                IntegrationType.AzureDevOps => $"https://{boardBaseUrl}/api/projects/{project.Id}/sync/azuredevops/webhook",
+                _ => null
+            };
+
             var agentboardJson = JsonSerializer.Serialize(new
             {
                 projectId = project.Id.ToString(),
                 projectName = project.Name,
                 boardUrl = $"https://{boardBaseUrl}/projects/{project.Id}",
                 apiBaseUrl = $"https://{boardBaseUrl}/api",
-                integrationEndpoint = $"https://{boardBaseUrl}/api/projects/{project.Id}/integration"
+                integrationEndpoint = $"https://{boardBaseUrl}/api/projects/{project.Id}/integration",
+                integrationStatusEndpoint = $"https://{boardBaseUrl}/api/projects/{project.Id}/integration/status",
+                integrationType = integrationType.ToString(),
+                syncEndpoint,
+                webhookEndpoint,
+                todosEndpoint = $"https://{boardBaseUrl}/api/todos",
+                featuresEndpoint = $"https://{boardBaseUrl}/api/feature-requests"
             }, new JsonSerializerOptions { WriteIndented = true });
             WriteEntry(archive, "agentboard.json", agentboardJson);
+
+            // ── SETUP.md ──────────────────────────────────────────────────────
+            WriteEntry(archive, "SETUP.md", BuildSetupMarkdown(
+                project, boardBaseUrl, integrationType, syncEndpoint, webhookEndpoint));
 
             // ── team.md ──────────────────────────────────────────────────────
             if (primaryTeam is not null)
@@ -167,6 +191,224 @@ public class DeployService(
         }
 
         return ms.ToArray();
+    }
+
+    private static string BuildSetupMarkdown(
+        Project project,
+        string boardBaseUrl,
+        IntegrationType integrationType,
+        string? syncEndpoint,
+        string? webhookEndpoint)
+    {
+        var apiBase = $"https://{boardBaseUrl}/api";
+        var integrationEndpoint = $"{apiBase}/projects/{project.Id}/integration";
+        var statusEndpoint = $"{integrationEndpoint}/status";
+        var todosEndpoint = $"{apiBase}/todos";
+        var featuresEndpoint = $"{apiBase}/feature-requests";
+
+        var sb = new StringBuilder();
+        sb.AppendLine($"# AgentBoard Setup Guide — {project.Name}");
+        sb.AppendLine();
+        sb.AppendLine($"> Board URL: {$"https://{boardBaseUrl}/projects/{project.Id}"}");
+        sb.AppendLine($"> Project ID: `{project.Id}`");
+        sb.AppendLine($"> Integration type: **{integrationType}**");
+        sb.AppendLine();
+        sb.AppendLine("---");
+        sb.AppendLine();
+
+        // ── Step 1: Connect ──────────────────────────────────────────────────
+        sb.AppendLine("## Step 1 — Connect this project to " + integrationType switch
+        {
+            IntegrationType.GitHub => "GitHub",
+            IntegrationType.AzureDevOps => "Azure DevOps",
+            _ => "your integration"
+        });
+        sb.AppendLine();
+
+        if (integrationType == IntegrationType.GitHub)
+        {
+            sb.AppendLine("1. Create a GitHub Personal Access Token (classic) with `repo` scope:");
+            sb.AppendLine("   - Go to GitHub → Settings → Developer settings → Personal access tokens → Tokens (classic)");
+            sb.AppendLine("   - Grant: `repo` (full control of private repositories)");
+            sb.AppendLine();
+            sb.AppendLine("2. POST the connection to AgentBoard:");
+            sb.AppendLine();
+            sb.AppendLine("```bash");
+            sb.AppendLine($"curl -X POST \"{integrationEndpoint}\" \\");
+            sb.AppendLine("  -H \"Content-Type: application/json\" \\");
+            sb.AppendLine("  -d '{");
+            sb.AppendLine("    \"token\": \"ghp_YOUR_GITHUB_TOKEN\",");
+            sb.AppendLine("    \"repoUrl\": \"https://github.com/owner/repo\",");
+            sb.AppendLine("    \"externalProjectId\": \"\"");
+            sb.AppendLine("  }'");
+            sb.AppendLine("```");
+        }
+        else if (integrationType == IntegrationType.AzureDevOps)
+        {
+            sb.AppendLine("1. Create an Azure DevOps Personal Access Token:");
+            sb.AppendLine("   - Go to Azure DevOps → User settings → Personal access tokens");
+            sb.AppendLine("   - Scope: **Work Items** (Read & Write)");
+            sb.AppendLine();
+            sb.AppendLine("2. Find your ADO project URL and project name:");
+            sb.AppendLine("   - Format: `https://dev.azure.com/{organisation}`");
+            sb.AppendLine("   - External Project ID = your ADO project name (e.g. `MyProject`)");
+            sb.AppendLine();
+            sb.AppendLine("3. POST the connection to AgentBoard:");
+            sb.AppendLine();
+            sb.AppendLine("```bash");
+            sb.AppendLine($"curl -X POST \"{integrationEndpoint}\" \\");
+            sb.AppendLine("  -H \"Content-Type: application/json\" \\");
+            sb.AppendLine("  -d '{");
+            sb.AppendLine("    \"token\": \"YOUR_ADO_PAT\",");
+            sb.AppendLine("    \"repoUrl\": \"https://dev.azure.com/your-organisation\",");
+            sb.AppendLine("    \"externalProjectId\": \"YourADOProjectName\"");
+            sb.AppendLine("  }'");
+            sb.AppendLine("```");
+        }
+        else
+        {
+            sb.AppendLine("> No integration configured for this team. Assign a GitHub or Azure DevOps team in AgentBoard first.");
+        }
+
+        sb.AppendLine();
+        sb.AppendLine("3. Verify the connection:");
+        sb.AppendLine();
+        sb.AppendLine("```bash");
+        sb.AppendLine($"curl \"{statusEndpoint}\"");
+        sb.AppendLine("```");
+        sb.AppendLine();
+        sb.AppendLine("Expected response when connected:");
+        sb.AppendLine("```json");
+        sb.AppendLine("{");
+        sb.AppendLine("  \"isConnected\": true,");
+        sb.AppendLine("  \"connectedAt\": \"2024-01-15T14:32:00Z\",");
+        sb.AppendLine("  \"repoUrl\": \"...\",");
+        sb.AppendLine("  \"externalProjectId\": \"...\",");
+        sb.AppendLine($"  \"webhookUrl\": \"{webhookEndpoint ?? "(not configured)"}\"");
+        sb.AppendLine("}");
+        sb.AppendLine("```");
+        sb.AppendLine();
+        sb.AppendLine("---");
+        sb.AppendLine();
+
+        // ── Step 2: Sync ─────────────────────────────────────────────────────
+        if (syncEndpoint is not null)
+        {
+            sb.AppendLine("## Step 2 — Sync todos & features to " + (integrationType == IntegrationType.GitHub ? "GitHub Issues" : "ADO Work Items"));
+            sb.AppendLine();
+            sb.AppendLine("Run a full sync to push all todos and feature requests as external issues:");
+            sb.AppendLine();
+            sb.AppendLine("```bash");
+            sb.AppendLine($"curl -X POST \"{syncEndpoint}\"");
+            sb.AppendLine("```");
+            sb.AppendLine();
+            sb.AppendLine("Response shape:");
+            sb.AppendLine("```json");
+            sb.AppendLine("{ \"created\": 5, \"updated\": 2, \"failed\": 0, \"errors\": [] }");
+            sb.AppendLine("```");
+            sb.AppendLine();
+            sb.AppendLine("---");
+            sb.AppendLine();
+        }
+
+        // ── Step 3: Webhooks ─────────────────────────────────────────────────
+        if (webhookEndpoint is not null)
+        {
+            sb.AppendLine("## Step 3 — Configure webhook for live events");
+            sb.AppendLine();
+            sb.AppendLine($"Webhook URL: `{webhookEndpoint}`");
+            sb.AppendLine();
+
+            if (integrationType == IntegrationType.GitHub)
+            {
+                sb.AppendLine("In your GitHub repo:");
+                sb.AppendLine("- Settings → Webhooks → Add webhook");
+                sb.AppendLine($"- Payload URL: `{webhookEndpoint}`");
+                sb.AppendLine("- Content type: `application/json`");
+                sb.AppendLine("- Events: **Issues** (opened, closed, edited, reopened)");
+            }
+            else if (integrationType == IntegrationType.AzureDevOps)
+            {
+                sb.AppendLine("In your Azure DevOps project:");
+                sb.AppendLine("- Project Settings → Service hooks → Create subscription");
+                sb.AppendLine("- Service: **Web Hooks**");
+                sb.AppendLine("- Trigger: **Work item updated**");
+                sb.AppendLine($"- URL: `{webhookEndpoint}`");
+            }
+
+            sb.AppendLine();
+            sb.AppendLine("Webhooks allow AgentBoard to automatically update todo/feature status when issues are closed or reopened externally.");
+            sb.AppendLine();
+            sb.AppendLine("---");
+            sb.AppendLine();
+        }
+
+        // ── Step 4: Report progress (live API calls) ─────────────────────────
+        sb.AppendLine("## Step 4 — Report work progress to AgentBoard");
+        sb.AppendLine();
+        sb.AppendLine("Agents should call these endpoints to keep the board live:");
+        sb.AppendLine();
+        sb.AppendLine("### Claim a todo");
+        sb.AppendLine("```bash");
+        sb.AppendLine($"curl -X PATCH \"{todosEndpoint}/{{todoId}}\" \\");
+        sb.AppendLine("  -H \"Content-Type: application/json\" \\");
+        sb.AppendLine("  -d '{ \"claimedBy\": \"agent-name\" }'");
+        sb.AppendLine("```");
+        sb.AppendLine();
+        sb.AppendLine("### Update todo status");
+        sb.AppendLine("Valid statuses: `Pending`, `InProgress`, `Done`, `Blocked`");
+        sb.AppendLine("```bash");
+        sb.AppendLine($"curl -X PATCH \"{todosEndpoint}/{{todoId}}\" \\");
+        sb.AppendLine("  -H \"Content-Type: application/json\" \\");
+        sb.AppendLine("  -d '{ \"status\": \"InProgress\" }'");
+        sb.AppendLine("```");
+        sb.AppendLine();
+        sb.AppendLine("### Create a new todo");
+        sb.AppendLine("```bash");
+        sb.AppendLine($"curl -X POST \"{todosEndpoint}\" \\");
+        sb.AppendLine("  -H \"Content-Type: application/json\" \\");
+        sb.AppendLine("  -d '{");
+        sb.AppendLine($"    \"projectId\": \"{project.Id}\",");
+        sb.AppendLine("    \"title\": \"Task title\",");
+        sb.AppendLine("    \"description\": \"What needs doing\",");
+        sb.AppendLine("    \"priority\": \"Medium\",");
+        sb.AppendLine("    \"status\": \"Pending\"");
+        sb.AppendLine("  }'");
+        sb.AppendLine("```");
+        sb.AppendLine();
+        sb.AppendLine("### List all todos for this project");
+        sb.AppendLine("```bash");
+        sb.AppendLine($"curl \"{todosEndpoint}?projectId={project.Id}\"");
+        sb.AppendLine("```");
+        sb.AppendLine();
+        sb.AppendLine("### Submit a feature request");
+        sb.AppendLine("```bash");
+        sb.AppendLine($"curl -X POST \"{featuresEndpoint}\" \\");
+        sb.AppendLine("  -H \"Content-Type: application/json\" \\");
+        sb.AppendLine("  -d '{");
+        sb.AppendLine($"    \"projectId\": \"{project.Id}\",");
+        sb.AppendLine("    \"title\": \"Feature title\",");
+        sb.AppendLine("    \"description\": \"Details of the request\"");
+        sb.AppendLine("  }'");
+        sb.AppendLine("```");
+        sb.AppendLine();
+        sb.AppendLine("---");
+        sb.AppendLine();
+        sb.AppendLine("## Quick reference");
+        sb.AppendLine();
+        sb.AppendLine($"| Endpoint | Method | Purpose |");
+        sb.AppendLine($"|----------|--------|---------|");
+        sb.AppendLine($"| `{integrationEndpoint}` | POST | Connect GitHub/ADO token |");
+        sb.AppendLine($"| `{statusEndpoint}` | GET | Check connection + get webhook URL |");
+        if (syncEndpoint is not null)
+            sb.AppendLine($"| `{syncEndpoint}` | POST | Push todos & features to external tracker |");
+        if (webhookEndpoint is not null)
+            sb.AppendLine($"| `{webhookEndpoint}` | POST | Receive live events from external tracker |");
+        sb.AppendLine($"| `{todosEndpoint}` | GET/POST | List or create todos |");
+        sb.AppendLine($"| `{todosEndpoint}/{{id}}` | PATCH | Update todo status / claim |");
+        sb.AppendLine($"| `{featuresEndpoint}` | GET/POST | List or submit feature requests |");
+
+        return sb.ToString();
     }
 
     // ── Private builders ─────────────────────────────────────────────────────
